@@ -19,12 +19,12 @@ func Default() Map {
 		Down:         key.NewBinding(key.WithKeys("j", "down")),
 		In:           key.NewBinding(key.WithKeys("l", "right", "enter")),
 		Out:          key.NewBinding(key.WithKeys("h", "left")),
-		Top:          key.NewBinding(key.WithKeys("g", "g")),
+		Top:          key.NewBinding(), // dispatched by gg chord handler
 		Bottom:       key.NewBinding(key.WithKeys("G")),
 		Refresh:      key.NewBinding(key.WithKeys("R")),
 		Quit:         key.NewBinding(key.WithKeys("q", "ctrl+c")),
 		New:          key.NewBinding(key.WithKeys("n")),
-		QuickNew:     key.NewBinding(key.WithKeys("g", "n")),
+		QuickNew:     key.NewBinding(), // dispatched by gn chord handler
 		Rename:       key.NewBinding(key.WithKeys("r")),
 		Edit:         key.NewBinding(key.WithKeys("e")),
 		StatusCycle:  key.NewBinding(key.WithKeys("x", " ")),

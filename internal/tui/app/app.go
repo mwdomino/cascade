@@ -67,6 +67,10 @@ type Model struct {
 	PendingDD   bool
 	DDDeadline  time.Time
 
+	// g-chord state (gg = Top, gn = QuickNew)
+	PendingG  bool
+	GDeadline time.Time
+
 	// Palette + action state
 	ActionReg   *action.Registry
 	PaletteMode bool
@@ -329,6 +333,33 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.GlobalMatches = nil
 			m.Cursor = 0
 			return m, nil
+		}
+
+		// g-chord double-tap (gg = Top, gn = QuickNew)
+		{
+			chordPending := m.PendingG && time.Now().Before(m.GDeadline)
+			if msg.String() == "g" {
+				if chordPending {
+					m.PendingG = false
+					m.Cursor = 0 // Top
+					return m, nil
+				}
+				m.PendingG = true
+				m.GDeadline = time.Now().Add(500 * time.Millisecond)
+				return m, nil
+			}
+			if chordPending && msg.String() == "n" {
+				m.PendingG = false
+				if m.PromptMode == promptNone {
+					m.PromptMode = promptQuickNew
+					m.Prompt.SetLabel("inbox:")
+					m.Prompt.Reset()
+					m.Prompt.Focus()
+					return m, nil
+				}
+			}
+			// Any other key (or expired chord): cancel pending state and fall through.
+			m.PendingG = false
 		}
 
 		// dd double-tap (raw key check before the switch)

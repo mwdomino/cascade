@@ -75,6 +75,48 @@ func TestToggleShowDone(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
 }
 
+func TestGChordTopAndCancel(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	// Single g must not move the cursor; the chord is still pending.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	beforeCursor := m.Cursor
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if m.Cursor != beforeCursor {
+		t.Errorf("single g should not move cursor; got %d want %d", m.Cursor, beforeCursor)
+	}
+	if !m.PendingG {
+		t.Error("PendingG should be set after first g")
+	}
+	// Second g completes the chord.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if m.Cursor != 0 {
+		t.Errorf("gg should move cursor to top; got %d", m.Cursor)
+	}
+	if m.PendingG {
+		t.Error("PendingG should clear after completion")
+	}
+	// A non-g, non-n key cancels the chord and dispatches normally.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.PendingG {
+		t.Error("PendingG should clear after non-chord key")
+	}
+}
+
+func TestGChordQuickNew(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	// gn opens the quick-capture prompt with label "inbox:".
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if m.PromptMode != promptQuickNew {
+		t.Errorf("gn should enter promptQuickNew; got %d", m.PromptMode)
+	}
+}
+
 func TestHelpToggle(t *testing.T) {
 	tree, th, cfg := setup(t)
 	m := newModel(tree, th, cfg).(*Model)
@@ -136,7 +178,8 @@ func TestEnterOnDotDotAscends(t *testing.T) {
 	if m.cursorIsDotDot() {
 		t.Errorf("cursor unexpectedly on `..` right after drilling in")
 	}
-	// gg jumps to top → that's `..`.
+	// gg jumps to top → that's `..` (proper two-key chord).
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	if !m.cursorIsDotDot() {
 		t.Errorf("gg should land cursor on `..`")
