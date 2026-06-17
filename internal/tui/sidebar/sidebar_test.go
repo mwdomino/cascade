@@ -48,6 +48,17 @@ func TestSidebarRendersExactItems(t *testing.T) {
 	}
 }
 
+func TestEmptyHintGuidesUser(t *testing.T) {
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := Model{Theme: th, Width: 40}
+	out := m.View(nil, 0, false)
+	for _, want := range []string{"no tasks here yet", "n", " to add one", ":"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("empty hint missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestProgressRollup(t *testing.T) {
 	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
 	m := Model{Theme: th, Width: 60}

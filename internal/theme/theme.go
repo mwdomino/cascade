@@ -39,10 +39,15 @@ type SelectionColors struct {
 }
 
 type MarkdownColors struct {
-	Heading lipgloss.Color `yaml:"heading"`
-	Code    lipgloss.Color `yaml:"code"`
-	Link    lipgloss.Color `yaml:"link"`
-	List    lipgloss.Color `yaml:"list"`
+	Heading      lipgloss.Color `yaml:"heading"`
+	HeadingH1    lipgloss.Color `yaml:"heading_h1"`
+	HeadingH2    lipgloss.Color `yaml:"heading_h2"`
+	HeadingH3    lipgloss.Color `yaml:"heading_h3"`
+	Code         lipgloss.Color `yaml:"code"`
+	Link         lipgloss.Color `yaml:"link"`
+	List         lipgloss.Color `yaml:"list"`
+	CheckboxDone lipgloss.Color `yaml:"checkbox_done"`
+	CheckboxTodo lipgloss.Color `yaml:"checkbox_todo"`
 }
 
 func Resolve(cfg *config.Config) (*Theme, error) {
@@ -105,6 +110,26 @@ func (t *Theme) StatusGlyph(s model.Status) string {
 func (t *Theme) GlamourStyle() ansi.StyleConfig {
 	str := func(c lipgloss.Color) *string { s := string(c); return &s }
 	bp := uint(0)
+
+	headingBlock := func(c lipgloss.Color) ansi.StyleBlock {
+		color := c
+		if color == "" {
+			color = t.Markdown.Heading
+		}
+		return ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: str(color), Bold: boolPtr(true)},
+		}
+	}
+
+	doneColor := t.Markdown.CheckboxDone
+	if doneColor == "" {
+		doneColor = t.Status.Done
+	}
+	todoColor := t.Markdown.CheckboxTodo
+	if todoColor == "" {
+		todoColor = t.Palette.Dim
+	}
+
 	return ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{Color: str(t.Palette.Fg)},
@@ -113,11 +138,22 @@ func (t *Theme) GlamourStyle() ansi.StyleConfig {
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{Color: str(t.Markdown.Heading), Bold: boolPtr(true)},
 		},
+		H1: headingBlock(t.Markdown.HeadingH1),
+		H2: headingBlock(t.Markdown.HeadingH2),
+		H3: headingBlock(t.Markdown.HeadingH3),
+		H4: headingBlock(t.Markdown.Heading),
+		H5: headingBlock(t.Markdown.Heading),
+		H6: headingBlock(t.Markdown.Heading),
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{Color: str(t.Markdown.Code)},
 		},
 		Link: ansi.StylePrimitive{Color: str(t.Markdown.Link), Underline: boolPtr(true)},
 		Item: ansi.StylePrimitive{Color: str(t.Markdown.List)},
+		Task: ansi.StyleTask{
+			StylePrimitive: ansi.StylePrimitive{Color: str(t.Markdown.List)},
+			Ticked:         lipgloss.NewStyle().Foreground(doneColor).Render("✓ "),
+			Unticked:       lipgloss.NewStyle().Foreground(todoColor).Render("○ "),
+		},
 	}
 }
 

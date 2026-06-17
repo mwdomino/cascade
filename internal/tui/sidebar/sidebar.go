@@ -17,7 +17,7 @@ type Model struct {
 
 func (m Model) View(items []*model.Node, cursor int, showDone bool) string {
 	if len(items) == 0 {
-		return lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim).Render("(empty)")
+		return m.emptyHint()
 	}
 	var b strings.Builder
 	for i, it := range items {
@@ -26,6 +26,19 @@ func (m Model) View(items []*model.Node, cursor int, showDone bool) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func (m Model) emptyHint() string {
+	dim := lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim)
+	accent := lipgloss.NewStyle().Foreground(m.Theme.Palette.Accent).Bold(true)
+	lines := []string{
+		dim.Render("no tasks here yet"),
+		"",
+		dim.Render("press ") + accent.Render("n") + dim.Render(" to add one"),
+		dim.Render("press ") + accent.Render(":") + dim.Render(" for the command palette"),
+		dim.Render("press ") + accent.Render("h") + dim.Render(" to go back"),
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) renderRow(n *model.Node, selected bool) string {
