@@ -71,8 +71,9 @@ func (m Model) renderRow(n *model.Node, selected bool) string {
 			Foreground(m.Theme.Palette.Dim).
 			Render(fmt.Sprintf("  [%d/%d]", done, total))
 	}
-	// Only tasks get dim+strike when done; container types stay legible.
-	dim := n.EffectiveType() == model.TypeTask && n.FM.Status == model.StatusDone
+	// Dim+strike for any node that's effectively done (task with status=done,
+	// or container whose descendant tasks are all done).
+	dim := n.EffectivelyDone()
 	var titleStyle lipgloss.Style
 	switch n.EffectiveType() {
 	case model.TypeProject:

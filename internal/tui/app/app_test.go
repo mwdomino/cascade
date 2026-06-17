@@ -188,20 +188,21 @@ func TestStatusCycle(t *testing.T) {
 	}
 }
 
-func TestStatusCycleRejectedOnContainer(t *testing.T) {
+func TestStatusCycleNoOpOnContainer(t *testing.T) {
 	tree, th, cfg := setup(t)
 	m := newModel(tree, th, cfg).(*Model)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	// Cursor is on a top-level node which defaults to project.
 	if m.selectedNode() == nil || !m.selectedNode().IsContainer() {
 		t.Fatalf("expected selection to be a container, got %v", m.selectedNode())
 	}
+	before := m.selectedNode().FM.Status
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
-	if m.selectedNode().FM.Status == model.StatusDoing {
-		t.Error("status cycle should be a no-op on a container")
+	if m.selectedNode().FM.Status != before {
+		t.Errorf("container status should not change, got %q want %q",
+			m.selectedNode().FM.Status, before)
 	}
-	if m.ActionOut == nil || !strings.Contains(m.ActionOut.Stderr, "tasks") {
-		t.Errorf("expected stderr to mention tasks, got %+v", m.ActionOut)
+	if m.ActionOut != nil {
+		t.Errorf("expected silent no-op, got ActionOut=%+v", m.ActionOut)
 	}
 }
 

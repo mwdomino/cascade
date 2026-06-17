@@ -115,8 +115,9 @@ func (m *Model) visibleSiblings() []*model.Node {
 	if !m.ShowDone {
 		filtered := make([]*model.Node, 0, len(sibs))
 		for _, n := range sibs {
-			// Containers stay visible; only done tasks are hidden.
-			if n.EffectiveType() == model.TypeTask && n.FM.Status == model.StatusDone {
+			// Hide anything that's effectively done: done leaf tasks AND
+			// fully-rolled-up containers.
+			if n.EffectivelyDone() {
 				continue
 			}
 			filtered = append(filtered, n)
@@ -413,16 +414,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.Keys.ToggleDone):
 			m.ShowDone = !m.ShowDone
 		case key.Matches(msg, m.Keys.StatusCycle):
-			if n := m.selectedNode(); n != nil {
-				if n.IsContainer() {
-					m.ActionOut = &action.Result{
-						Stderr:   "status only applies to tasks, not " + string(n.EffectiveType()) + "s",
-						ExitCode: 1,
-					}
-				} else if err := m.Tree.SetStatus(n, n.FM.Status.Cycle()); err != nil {
+			if n := m.selectedNode(); n != nil && !n.IsContainer() {
+				if err := m.Tree.SetStatus(n, n.FM.Status.Cycle()); err != nil {
 					m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
 				}
 			}
+			// On containers x is a silent no-op: their status is rolled up
+			// from descendants automatically.
 		case key.Matches(msg, m.Keys.MoveUp):
 			if n := m.selectedNode(); n != nil {
 				if err := m.Tree.MoveUp(n); err == nil && m.childIndex() > 0 {
@@ -790,6 +788,7 @@ func (m *Model) helpOverlay() string {
 		"",
 		hintStyle.Render("tip: drill in with l, then n adds a child at that tier"),
 		hintStyle.Render("types: top-level=project (■), with-children=folder (▸), leaves=task (○ ◐ ✓ ✗)"),
+		hintStyle.Render("a container rolls up to ✓ when all its descendant tasks are done"),
 		hintStyle.Render("override with `type: project|folder|task` in frontmatter"),
 		hintStyle.Render("(any key to close)"),
 	}, "\n")

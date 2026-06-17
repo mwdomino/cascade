@@ -46,6 +46,31 @@ func TestEffectiveTypeFallback(t *testing.T) {
 	}
 }
 
+func TestEffectivelyDoneRollup(t *testing.T) {
+	root := &Node{}
+	project := &Node{Slug: "p", Parent: root}
+	root.Children = []*Node{project}
+	folder := &Node{Slug: "f", Parent: project}
+	project.Children = []*Node{folder}
+	t1 := &Node{Slug: "t1", Parent: folder, FM: Frontmatter{Status: StatusDone}}
+	t2 := &Node{Slug: "t2", Parent: folder, FM: Frontmatter{Status: StatusTodo}}
+	folder.Children = []*Node{t1, t2}
+
+	if project.EffectivelyDone() {
+		t.Error("project should NOT be done while a leaf task is todo")
+	}
+	t2.FM.Status = StatusDone
+	if !project.EffectivelyDone() {
+		t.Error("project SHOULD be done once all descendant tasks are done")
+	}
+
+	// Empty containers are not done.
+	empty := &Node{Slug: "e", Parent: root}
+	if empty.EffectivelyDone() {
+		t.Error("empty container should not be done")
+	}
+}
+
 func TestEffectiveTypeExplicit(t *testing.T) {
 	root := &Node{}
 	leaf := &Node{Slug: "x", Parent: root, FM: Frontmatter{Type: TypeTask}}

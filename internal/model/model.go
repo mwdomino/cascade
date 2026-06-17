@@ -115,6 +115,25 @@ func (n *Node) IsContainer() bool {
 	return t == TypeProject || t == TypeFolder
 }
 
+// EffectivelyDone reports whether this node is "done" from the user's POV.
+// A task is done when its status is StatusDone. A container is done when it
+// has at least one child and every direct child is EffectivelyDone — which
+// recursively requires every descendant task to be done.
+func (n *Node) EffectivelyDone() bool {
+	if n.EffectiveType() == TypeTask {
+		return n.FM.Status == StatusDone
+	}
+	if len(n.Children) == 0 {
+		return false
+	}
+	for _, c := range n.Children {
+		if !c.EffectivelyDone() {
+			return false
+		}
+	}
+	return true
+}
+
 func (n *Node) ProgressDoneTotal() (done, total int) {
 	for _, c := range n.Children {
 		total++

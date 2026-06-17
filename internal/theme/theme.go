@@ -90,9 +90,15 @@ func decodeFromMap(m map[string]any) (*Theme, error) {
 	return &th, nil
 }
 
-// NodeGlyph picks the right glyph for a node: status icon for tasks,
-// container icon for folders/projects.
+// NodeGlyph picks the right glyph for a node:
+//   - container with every descendant task done → ✓ in done color (rollup),
+//   - project → filled square in accent,
+//   - folder → triangle in dim,
+//   - task → status icon.
 func (t *Theme) NodeGlyph(n *model.Node) string {
+	if n.IsContainer() && n.EffectivelyDone() {
+		return lipgloss.NewStyle().Foreground(t.Status.Done).Render("✓")
+	}
 	switch n.EffectiveType() {
 	case model.TypeProject:
 		return lipgloss.NewStyle().Foreground(t.Palette.Accent).Bold(true).Render("■")
