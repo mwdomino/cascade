@@ -1,6 +1,7 @@
 package details
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -34,55 +35,69 @@ func (m Model) View(n *model.Node) string {
 		Foreground(m.Theme.Palette.Border).
 		Render(strings.Repeat("─", width))
 
-	body := n.Body
-	if len(n.Children) > 0 {
-		body += "\n\n## Subtasks\n\n" + m.synthesizeChildren(n)
-	}
-
-	rendered := body
-	r, err := glamour.NewTermRenderer(
-		glamour.WithStyles(m.Theme.GlamourStyle()),
-		glamour.WithWordWrap(width),
-	)
-	if err == nil {
-		if out, rerr := r.Render(body); rerr == nil {
-			rendered = strings.TrimRight(out, "\n")
+	// Render the body via glamour. Containers/empty leaves may have no body.
+	rendered := strings.TrimRight(n.Body, "\n")
+	if rendered != "" {
+		r, err := glamour.NewTermRenderer(
+			glamour.WithStyles(m.Theme.GlamourStyle()),
+			glamour.WithWordWrap(width),
+		)
+		if err == nil {
+			if out, rerr := r.Render(n.Body); rerr == nil {
+				rendered = strings.TrimRight(out, "\n")
+			}
 		}
 	}
 
-	return title + "\n" + rule + "\n" + rendered
+	// Build the synthesized subtasks block AFTER glamour, so lipgloss-styled
+	// glyphs (which contain raw ANSI escapes) don't get fed through markdown
+	// rendering and mangled into literal escape sequences.
+	subtasks := m.synthesizeSubtasks(n)
+
+	parts := []string{title, rule}
+	if rendered != "" {
+		parts = append(parts, rendered)
+	}
+	if subtasks != "" {
+		parts = append(parts, subtasks)
+	}
+	return strings.Join(parts, "\n")
 }
 
-func (m Model) synthesizeChildren(n *model.Node) string {
+func (m Model) synthesizeSubtasks(n *model.Node) string {
+	if len(n.Children) == 0 {
+		return ""
+	}
+	heading := lipgloss.NewStyle().
+		Foreground(m.Theme.Markdown.HeadingH2).
+		Bold(true).
+		Render("Subtasks")
+	progressStyle := lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim)
+	titleStyle := lipgloss.NewStyle().Foreground(m.Theme.Palette.Fg)
+	doneStyle := titleStyle.
+		Foreground(m.Theme.Palette.Dim).
+		Strikethrough(true)
+
 	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(heading)
+	b.WriteString("\n\n")
 	for _, c := range n.Children {
-		b.WriteString("- ")
-		b.WriteString(m.Theme.NodeGlyph(c))
+		glyph := m.Theme.NodeGlyph(c)
+		t := c.Title()
+		if c.EffectiveType() == model.TypeTask && c.FM.Status == model.StatusDone {
+			t = doneStyle.Render(t)
+		} else {
+			t = titleStyle.Render(t)
+		}
+		b.WriteString("  ")
+		b.WriteString(glyph)
 		b.WriteString(" ")
-		b.WriteString(c.Title())
+		b.WriteString(t)
 		if d, total := c.ProgressDoneTotal(); total > 0 {
-			b.WriteString(" `[")
-			b.WriteString(itoa(d))
-			b.WriteString("/")
-			b.WriteString(itoa(total))
-			b.WriteString("]`")
+			b.WriteString(progressStyle.Render(fmt.Sprintf("  [%d/%d]", d, total)))
 		}
 		b.WriteString("\n")
 	}
 	return b.String()
-}
-
-func itoa(i int) string {
-	const digits = "0123456789"
-	if i == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	pos := len(buf)
-	for i > 0 {
-		pos--
-		buf[pos] = digits[i%10]
-		i /= 10
-	}
-	return string(buf[pos:])
 }
