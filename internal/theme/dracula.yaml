@@ -1,0 +1,20 @@
+name: dracula
+palette:
+  bg: "#282a36"
+  fg: "#f8f8f2"
+  dim: "#6272a4"
+  border: "#44475a"
+  accent: "#bd93f9"
+status:
+  todo: "#6272a4"
+  doing: "#f1fa8c"
+  done: "#50fa7b"
+  blocked: "#ff5555"
+selection:
+  cursor_bg: "#44475a"
+  search_match: "#ffb86c"
+markdown:
+  heading: "#bd93f9"
+  code: "#50fa7b"
+  link: "#8be9fd"
+  list: "#f8f8f2"
