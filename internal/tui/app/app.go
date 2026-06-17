@@ -24,7 +24,6 @@ import (
 	"github.com/mwdomino/cascade/internal/tui/prompt"
 	"github.com/mwdomino/cascade/internal/tui/search"
 	"github.com/mwdomino/cascade/internal/tui/sidebar"
-	"github.com/sahilm/fuzzy"
 )
 
 type promptMode int
@@ -34,7 +33,6 @@ const (
 	promptNew
 	promptQuickNew
 	promptRename
-	promptMoveTo
 	promptSearchLocal
 	promptSearchGlobal
 )
@@ -95,6 +93,10 @@ type Model struct {
 	ActionRunning   string // name of the action currently executing, "" when idle
 
 	HelpMode bool
+
+	// Move-to picker (centered overlay reusing palette.Model)
+	MovePickerMode bool
+	MovePicker     palette.Model
 
 	Width, Height int
 }
@@ -341,6 +343,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		// Move-to picker mode: forward keys to the picker, handle Esc.
+		if m.MovePickerMode {
+			if msg.String() == "esc" {
+				m.MovePickerMode = false
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.MovePicker, cmd = m.MovePicker.Update(msg)
+			return m, cmd
+		}
+
 		// Confirm overlay: handle before everything else.
 		if m.ConfirmMode {
 			switch msg.String() {
@@ -547,11 +560,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case key.Matches(msg, m.Keys.MoveTo):
-			if m.PromptMode == promptNone && m.selectedNode() != nil {
-				m.PromptMode = promptMoveTo
-				m.Prompt.SetLabel("move to:")
-				m.Prompt.Reset()
-				m.Prompt.Focus()
+			if m.PromptMode == promptNone && !m.MovePickerMode && m.selectedNode() != nil {
+				m.openMovePicker()
 				return m, nil
 			}
 		case key.Matches(msg, m.Keys.Edit):
@@ -621,21 +631,6 @@ func (m *Model) submitPrompt() tea.Cmd {
 		if val != "" && m.selectedNode() != nil {
 			if err := m.Tree.Rename(m.selectedNode(), val); err != nil {
 				m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
-			}
-		}
-	case promptMoveTo:
-		if val != "" && m.selectedNode() != nil {
-			candidates := m.Tree.AllNodes()
-			labels := make([]string, len(candidates))
-			for i, c := range candidates {
-				labels[i] = c.Title()
-			}
-			matches := fuzzy.Find(val, labels)
-			if len(matches) > 0 {
-				target := candidates[matches[0].Index]
-				if err := m.Tree.MoveTo(m.selectedNode(), target); err != nil {
-					m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
-				}
 			}
 		}
 	case promptSearchLocal:
@@ -769,11 +764,14 @@ func (m *Model) View() string {
 	detPadded := lipgloss.NewStyle().PaddingLeft(1).Render(det)
 	pane := lipgloss.JoinHorizontal(lipgloss.Top, side, detPadded)
 
-	// Palette renders as a centered modal over the pane area, replacing
-	// the pane content but leaving head + hint visible.
+	// Palette and move-picker render as centered modals over the pane area,
+	// replacing the pane content but leaving head + hint visible.
 	if m.PaletteMode {
 		pane = lipgloss.Place(m.Width, paneH, lipgloss.Center, lipgloss.Center,
 			m.paletteCard())
+	} else if m.MovePickerMode {
+		pane = lipgloss.Place(m.Width, paneH, lipgloss.Center, lipgloss.Center,
+			m.movePickerCard())
 	}
 
 	parts := []string{head, pane}
@@ -784,6 +782,86 @@ func (m *Model) View() string {
 		parts = append(parts, hint)
 	}
 	return strings.Join(parts, "\n")
+}
+
+// openMovePicker populates and activates a centered fuzzy picker of all
+// possible move targets (every node except self and descendants, plus the
+// root as "(top level)").
+func (m *Model) openMovePicker() {
+	sel := m.selectedNode()
+	if sel == nil {
+		return
+	}
+	m.MovePickerMode = true
+	m.MovePicker = palette.New(m.Theme)
+
+	items := []palette.Item{}
+	// Root is a valid target.
+	items = append(items, palette.Item{
+		Name: "(top level)",
+		Hint: "",
+		Run: func() tea.Cmd {
+			if err := m.Tree.MoveTo(sel, m.Tree.Root); err != nil {
+				m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
+			}
+			m.MovePickerMode = false
+			return nil
+		},
+	})
+
+	for _, t := range m.Tree.AllNodes() {
+		if t == sel || isDescendant(t, sel) {
+			continue
+		}
+		target := t // capture
+		items = append(items, palette.Item{
+			Name: target.Title(),
+			Hint: breadcrumbPath(target),
+			Run: func() tea.Cmd {
+				if err := m.Tree.MoveTo(sel, target); err != nil {
+					m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
+				}
+				m.MovePickerMode = false
+				return nil
+			},
+		})
+	}
+	m.MovePicker.SetItems(items)
+}
+
+// isDescendant reports whether maybe is a descendant of root.
+func isDescendant(maybe, root *model.Node) bool {
+	for p := maybe.Parent; p != nil; p = p.Parent {
+		if p == root {
+			return true
+		}
+	}
+	return false
+}
+
+// breadcrumbPath returns "ancestor › parent" for use as the picker hint.
+func breadcrumbPath(n *model.Node) string {
+	var parts []string
+	for p := n.Parent; p != nil && !p.IsRoot(); p = p.Parent {
+		parts = append([]string{p.Title()}, parts...)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " › ")
+}
+
+// movePickerCard wraps the picker view in a rounded card like the palette.
+func (m *Model) movePickerCard() string {
+	header := lipgloss.NewStyle().
+		Foreground(m.Theme.Palette.Accent).
+		Bold(true).
+		Render("move to:")
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.Theme.Palette.Border).
+		Padding(0, 2).
+		Render(header + "\n" + m.MovePicker.View())
 }
 
 // paletteCard wraps the palette view in a rounded border so it reads as a
@@ -821,6 +899,8 @@ func (m *Model) hintBar() string {
 		items = []string{item("y", "confirm"), item("n/esc", "cancel")}
 	case m.PaletteMode:
 		items = []string{item("↑↓", "navigate"), item("enter", "run"), item("esc", "close")}
+	case m.MovePickerMode:
+		items = []string{item("type", "filter"), item("↑↓", "navigate"), item("enter", "move"), item("esc", "cancel")}
 	case m.PromptMode != promptNone:
 		items = []string{item("enter", "accept"), item("esc", "cancel")}
 	case m.GlobalMode:
@@ -874,7 +954,7 @@ func (m *Model) helpOverlay() string {
 		"",
 		section.Render("MANIPULATION"),
 		row("K / J", "move up / down"),
-		row("m", "move to another parent"),
+		row("m", "move to another parent (centered fuzzy picker)"),
 		row("x / space", "cycle status"),
 		row("Z", "toggle hide-done (default: show, strikethrough)"),
 		row("dd", "soft delete"),

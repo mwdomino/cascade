@@ -117,6 +117,43 @@ func TestGChordQuickNew(t *testing.T) {
 	}
 }
 
+func TestMovePickerOpensAndMoves(t *testing.T) {
+	dir := t.TempDir()
+	tree, _ := store.Load(dir)
+	src, _ := tree.Create(tree.Root, "Source") // top-level task
+	target, _ := tree.Create(tree.Root, "Target")
+
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := newModel(tree, th, &config.Config{}).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Move cursor to Source (after sort, both are todo so prefix order holds:
+	// source first, target second). Source is at visible index 0.
+	if m.selectedNode() != src {
+		t.Fatalf("setup: cursor not on source, got %v", m.selectedNode())
+	}
+
+	// Open picker.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if !m.MovePickerMode {
+		t.Fatal("expected MovePickerMode true after pressing m")
+	}
+
+	// Type "Target" to filter.
+	for _, r := range "Target" {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	// Enter commits the top match.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.MovePickerMode {
+		t.Error("picker should close after commit")
+	}
+	if src.Parent != target {
+		t.Errorf("expected src.Parent == target, got %v", src.Parent)
+	}
+}
+
 func TestActionRunsAsync(t *testing.T) {
 	tree, th, cfg := setup(t)
 	reg := action.NewRegistry(map[string]config.ActionDef{
