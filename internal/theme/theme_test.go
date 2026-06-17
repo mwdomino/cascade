@@ -52,6 +52,15 @@ func TestGlamourStyleHeadingsAndTasks(t *testing.T) {
 	if s.H3.Color == nil || *s.H3.Color != "#8be9fd" {
 		t.Errorf("H3 color: %v", s.H3.Color)
 	}
+	if s.H4.Color == nil || *s.H4.Color != "#50fa7b" {
+		t.Errorf("H4 color: %v", s.H4.Color)
+	}
+	if s.H5.Color == nil || *s.H5.Color != "#f1fa8c" {
+		t.Errorf("H5 color: %v", s.H5.Color)
+	}
+	if s.H6.Color == nil || *s.H6.Color != "#ffb86c" {
+		t.Errorf("H6 color: %v", s.H6.Color)
+	}
 	if !strings.Contains(s.Task.Ticked, "✓") {
 		t.Errorf("Task.Ticked missing ✓: %q", s.Task.Ticked)
 	}

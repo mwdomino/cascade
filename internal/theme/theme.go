@@ -43,6 +43,9 @@ type MarkdownColors struct {
 	HeadingH1    lipgloss.Color `yaml:"heading_h1"`
 	HeadingH2    lipgloss.Color `yaml:"heading_h2"`
 	HeadingH3    lipgloss.Color `yaml:"heading_h3"`
+	HeadingH4    lipgloss.Color `yaml:"heading_h4"`
+	HeadingH5    lipgloss.Color `yaml:"heading_h5"`
+	HeadingH6    lipgloss.Color `yaml:"heading_h6"`
 	Code         lipgloss.Color `yaml:"code"`
 	Link         lipgloss.Color `yaml:"link"`
 	List         lipgloss.Color `yaml:"list"`
@@ -141,9 +144,9 @@ func (t *Theme) GlamourStyle() ansi.StyleConfig {
 		H1: headingBlock(t.Markdown.HeadingH1),
 		H2: headingBlock(t.Markdown.HeadingH2),
 		H3: headingBlock(t.Markdown.HeadingH3),
-		H4: headingBlock(t.Markdown.Heading),
-		H5: headingBlock(t.Markdown.Heading),
-		H6: headingBlock(t.Markdown.Heading),
+		H4: headingBlock(t.Markdown.HeadingH4),
+		H5: headingBlock(t.Markdown.HeadingH5),
+		H6: headingBlock(t.Markdown.HeadingH6),
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{Color: str(t.Markdown.Code)},
 		},
