@@ -71,6 +71,18 @@ func (m Model) renderRow(n *model.Node, selected bool) string {
 			Foreground(m.Theme.Palette.Dim).
 			Render(fmt.Sprintf("  [%d/%d]", done, total))
 	}
+
+	// Truncate the title so the full row fits within m.Width. Budget =
+	// width minus cursor prefix ("> " or "  ") minus glyph + separator
+	// space minus the progress suffix.
+	if m.Width > 0 {
+		budget := m.Width - 2 /* cursor prefix */ - lipgloss.Width(glyph) - 1 /* space after glyph */
+		if progress != "" {
+			budget -= lipgloss.Width(progress)
+		}
+		title = truncateRunes(title, budget)
+	}
+
 	// Dim+strike for any node that's effectively done (task with status=done,
 	// or container whose descendant tasks are all done).
 	dim := n.EffectivelyDone()
@@ -93,4 +105,21 @@ func (m Model) renderRow(n *model.Node, selected bool) string {
 			Render("> " + rendered)
 	}
 	return "  " + rendered
+}
+
+// truncateRunes shortens s to at most max display cells (approximated by
+// rune count, which is correct for the printable characters cascade emits),
+// appending an ellipsis when truncated.
+func truncateRunes(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	if max == 1 {
+		return "…"
+	}
+	return string(runes[:max-1]) + "…"
 }

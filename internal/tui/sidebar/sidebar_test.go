@@ -48,6 +48,20 @@ func TestSidebarRendersExactItems(t *testing.T) {
 	}
 }
 
+func TestLongTitleTruncated(t *testing.T) {
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := Model{Theme: th, Width: 20}
+	long := "A title that is unmistakably longer than twenty columns wide"
+	items := []*model.Node{mkNode(long, model.StatusTodo)}
+	out := m.View(items, 0, false, false)
+	if !strings.Contains(out, "…") {
+		t.Errorf("expected ellipsis in truncated title:\n%s", out)
+	}
+	if strings.Contains(out, "longer than twenty columns wide") {
+		t.Errorf("title was not truncated:\n%s", out)
+	}
+}
+
 func TestDotDotRendersAtTopWhenRequested(t *testing.T) {
 	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
 	m := Model{Theme: th, Width: 40}
