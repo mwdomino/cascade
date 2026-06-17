@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/mwdomino/cascade/internal/action"
 	"github.com/mwdomino/cascade/internal/config"
 	"github.com/mwdomino/cascade/internal/model"
 	"github.com/mwdomino/cascade/internal/store"
@@ -27,9 +28,13 @@ func setup(t *testing.T) (*store.Tree, *theme.Theme, *config.Config) {
 	return tree, th, &config.Config{}
 }
 
+func newModel(tree *store.Tree, th *theme.Theme, cfg *config.Config) tea.Model {
+	return New(tree, th, cfg, action.NewRegistry(nil))
+}
+
 func TestDrillInAndBack(t *testing.T) {
 	tree, th, cfg := setup(t)
-	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+	tm := teatest.NewTestModel(t, newModel(tree, th, cfg),
 		teatest.WithInitialTermSize(120, 40))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}) // drill into "Work"
@@ -44,7 +49,7 @@ func TestBottomOnEmpty(t *testing.T) {
 	dir := t.TempDir()
 	tree, _ := store.Load(dir)
 	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
-	tm := teatest.NewTestModel(t, New(tree, th, &config.Config{}),
+	tm := teatest.NewTestModel(t, newModel(tree, th, &config.Config{}),
 		teatest.WithInitialTermSize(120, 40))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}}) // Bottom on empty list
@@ -61,7 +66,7 @@ func TestToggleShowDone(t *testing.T) {
 			tree.SetStatus(n, model.StatusDone)
 		}
 	}
-	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+	tm := teatest.NewTestModel(t, newModel(tree, th, cfg),
 		teatest.WithInitialTermSize(120, 40))
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Z'}})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -70,7 +75,7 @@ func TestToggleShowDone(t *testing.T) {
 
 func TestStatusCycle(t *testing.T) {
 	tree, th, cfg := setup(t)
-	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+	tm := teatest.NewTestModel(t, newModel(tree, th, cfg),
 		teatest.WithInitialTermSize(120, 40))
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}) // todo -> doing
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -83,7 +88,7 @@ func TestStatusCycle(t *testing.T) {
 
 func TestReorderKJ(t *testing.T) {
 	tree, th, cfg := setup(t)
-	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+	tm := teatest.NewTestModel(t, newModel(tree, th, cfg),
 		teatest.WithInitialTermSize(120, 40))
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // cursor → Personal
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}}) // swap with Work
@@ -96,7 +101,7 @@ func TestReorderKJ(t *testing.T) {
 
 func TestSoftDeleteFlow(t *testing.T) {
 	tree, th, cfg := setup(t)
-	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+	tm := teatest.NewTestModel(t, newModel(tree, th, cfg),
 		teatest.WithInitialTermSize(120, 40))
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
@@ -110,7 +115,7 @@ func TestSoftDeleteFlow(t *testing.T) {
 
 func TestLocalSearch(t *testing.T) {
 	tree, th, cfg := setup(t)
-	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+	tm := teatest.NewTestModel(t, newModel(tree, th, cfg),
 		teatest.WithInitialTermSize(120, 40))
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	tm.Type("personal")
@@ -119,9 +124,21 @@ func TestLocalSearch(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
 }
 
+func TestPaletteRefresh(t *testing.T) {
+	tree, th, cfg := setup(t)
+	reg := action.NewRegistry(nil)
+	tm := teatest.NewTestModel(t, New(tree, th, cfg, reg),
+		teatest.WithInitialTermSize(120, 40))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+	tm.Type("refresh")
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+}
+
 func TestCaptureNewTask(t *testing.T) {
 	tree, th, cfg := setup(t)
-	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+	tm := teatest.NewTestModel(t, newModel(tree, th, cfg),
 		teatest.WithInitialTermSize(120, 40))
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	tm.Type("Brand New Task")

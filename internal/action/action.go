@@ -31,6 +31,8 @@ func NewRegistry(defs map[string]config.ActionDef) *Registry {
 	return &Registry{defs: defs}
 }
 
+func (r *Registry) Defs() map[string]config.ActionDef { return r.defs }
+
 func (r *Registry) Applicable(n *model.Node) []Action {
 	out := make([]Action, 0, len(r.defs))
 	for name, def := range r.defs {

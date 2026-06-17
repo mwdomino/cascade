@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mwdomino/cascade/internal/action"
 	"github.com/mwdomino/cascade/internal/config"
 	"github.com/mwdomino/cascade/internal/editor"
 	"github.com/mwdomino/cascade/internal/model"
@@ -17,6 +19,7 @@ import (
 	"github.com/mwdomino/cascade/internal/tui/breadcrumb"
 	"github.com/mwdomino/cascade/internal/tui/details"
 	"github.com/mwdomino/cascade/internal/tui/keys"
+	"github.com/mwdomino/cascade/internal/tui/palette"
 	"github.com/mwdomino/cascade/internal/tui/prompt"
 	"github.com/mwdomino/cascade/internal/tui/search"
 	"github.com/mwdomino/cascade/internal/tui/sidebar"
@@ -64,20 +67,35 @@ type Model struct {
 	PendingDD   bool
 	DDDeadline  time.Time
 
+	// Palette + action state
+	ActionReg   *action.Registry
+	PaletteMode bool
+	Palette     palette.Model
+	ActionOut   *action.Result
+	ActionByKey map[string]action.Action
+
 	Width, Height int
 }
 
-func New(tree *store.Tree, th *theme.Theme, cfg *config.Config) tea.Model {
+func New(tree *store.Tree, th *theme.Theme, cfg *config.Config, reg *action.Registry) tea.Model {
+	byKey := make(map[string]action.Action)
+	for name, def := range reg.Defs() {
+		if def.Keybind != "" {
+			byKey[def.Keybind] = action.Action{Name: name, Def: def}
+		}
+	}
 	return &Model{
-		Tree:       tree,
-		Theme:      th,
-		Cfg:        cfg,
-		Keys:       keys.Default(),
-		Current:    tree.Root,
-		Sidebar:    sidebar.Model{Theme: th},
-		Details:    details.Model{Theme: th},
-		Breadcrumb: breadcrumb.Model{Theme: th},
-		Prompt:     prompt.New(th),
+		Tree:        tree,
+		Theme:       th,
+		Cfg:         cfg,
+		Keys:        keys.Default(),
+		Current:     tree.Root,
+		Sidebar:     sidebar.Model{Theme: th},
+		Details:     details.Model{Theme: th},
+		Breadcrumb:  breadcrumb.Model{Theme: th},
+		Prompt:      prompt.New(th),
+		ActionReg:   reg,
+		ActionByKey: byKey,
 	}
 }
 
@@ -121,6 +139,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Details.Width = msg.Width - sw - 2
 		m.Details.Height = msg.Height - 2
 	case tea.KeyMsg:
+		// Clear transient action output on any keypress.
+		if m.ActionOut != nil {
+			m.ActionOut = nil
+			return m, nil
+		}
+
+		// Palette mode: forward keys to palette, handle Esc.
+		if m.PaletteMode {
+			if msg.String() == "esc" {
+				m.PaletteMode = false
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.Palette, cmd = m.Palette.Update(msg)
+			return m, cmd
+		}
+
 		// Confirm overlay: handle before everything else.
 		if m.ConfirmMode {
 			switch msg.String() {
@@ -183,7 +218,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Any non-d key resets the pending dd state.
 		m.PendingDD = false
 
+		// Direct keybind dispatch (palette closed, prompt idle).
+		if m.PromptMode == promptNone {
+			if act, ok := m.ActionByKey[msg.String()]; ok {
+				if sel := m.selectedNode(); sel != nil {
+					res, _ := act.Run(sel)
+					m.ActionOut = &res
+					return m, nil
+				}
+			}
+		}
+
 		switch {
+		case key.Matches(msg, m.Keys.Palette):
+			if m.PromptMode == promptNone {
+				m.PaletteMode = true
+				m.Palette = palette.New(m.Theme)
+				m.Palette.SetItems(m.paletteItems())
+				return m, nil
+			}
 		case key.Matches(msg, m.Keys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.Keys.Up):
@@ -392,6 +445,33 @@ func (m *Model) inboxNode() *model.Node {
 	return n
 }
 
+func (m *Model) paletteItems() []palette.Item {
+	items := []palette.Item{
+		{Name: "refresh", Run: func() tea.Cmd {
+			_ = m.Tree.Reload()
+			m.PaletteMode = false
+			return nil
+		}},
+	}
+	sel := m.selectedNode()
+	if sel != nil {
+		for _, a := range m.ActionReg.Applicable(sel) {
+			act := a
+			items = append(items, palette.Item{
+				Name: act.Name,
+				Hint: act.Def.Cmd,
+				Run: func() tea.Cmd {
+					res, _ := act.Run(sel)
+					m.ActionOut = &res
+					m.PaletteMode = false
+					return nil
+				},
+			})
+		}
+	}
+	return items
+}
+
 func externalEditorCmd(path string) *exec.Cmd {
 	line := editor.EditorCmd()
 	parts := strings.Fields(line)
@@ -418,6 +498,15 @@ func (m *Model) View() string {
 	}
 	if m.PromptMode != promptNone {
 		return head + "\n" + pane + "\n" + m.Prompt.View()
+	}
+	if m.PaletteMode {
+		return head + "\n" + pane + "\n" + m.Palette.View()
+	}
+	if m.ActionOut != nil {
+		out := fmt.Sprintf("exit=%d\n%s\n%s",
+			m.ActionOut.ExitCode, m.ActionOut.Stdout, m.ActionOut.Stderr)
+		return head + "\n" + pane + "\n" +
+			lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim).Render(out)
 	}
 	return head + "\n" + pane
 }

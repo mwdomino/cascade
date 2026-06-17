@@ -6,6 +6,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mwdomino/cascade/internal/action"
 	"github.com/mwdomino/cascade/internal/config"
 	"github.com/mwdomino/cascade/internal/store"
 	"github.com/mwdomino/cascade/internal/theme"
@@ -40,7 +41,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "theme:", err)
 		os.Exit(1)
 	}
-	p := tea.NewProgram(app.New(tree, th, cfg), tea.WithAltScreen())
+	reg := action.NewRegistry(cfg.Actions)
+	p := tea.NewProgram(app.New(tree, th, cfg, reg), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "tui:", err)
 		os.Exit(1)
