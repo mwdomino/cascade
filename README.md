@@ -20,9 +20,28 @@ l drill in · n new · e edit · / search · : actions · ? help · q quit
 
 ## Install
 
+### Prebuilt binaries (recommended)
+
+Grab the latest tarball from [GitHub Releases](https://github.com/mwdomino/cascade/releases/latest):
+
+```sh
+# linux x86_64
+curl -sSL https://github.com/mwdomino/cascade/releases/latest/download/cascade_$(curl -s https://api.github.com/repos/mwdomino/cascade/releases/latest | grep tag_name | cut -d\" -f4 | sed 's/^v//')_Linux_x86_64.tar.gz | tar -xz
+./cascade
+```
+
+Releases ship `Linux_x86_64`, `Linux_arm64`, `macOS_x86_64`, `macOS_arm64`, and `Windows_x86_64` builds (tar.gz on Unix, zip on Windows) plus a `checksums.txt`.
+
+### Via `go install`
+
 ```sh
 go install github.com/mwdomino/cascade/cmd/cascade@latest
-# or, from a checkout:
+```
+
+### From source
+
+```sh
+git clone https://github.com/mwdomino/cascade && cd cascade
 just build && ./cascade
 ```
 
