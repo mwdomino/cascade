@@ -531,11 +531,23 @@ func externalEditorCmd(path string) *exec.Cmd {
 }
 
 func (m *Model) View() string {
-	border := lipgloss.NewStyle().Foreground(m.Theme.Palette.Border)
 	head := m.Breadcrumb.View(m.Current)
-	side := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone)
+	rawSide := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone)
 	det := m.Details.View(m.selectedNode())
-	pane := lipgloss.JoinHorizontal(lipgloss.Top, side, border.Render(" │ "), det)
+
+	sideHeight := m.Sidebar.Height
+	if sideHeight <= 0 {
+		sideHeight = lipgloss.Height(det)
+	}
+	side := lipgloss.NewStyle().
+		Width(m.Sidebar.Width).
+		Height(sideHeight).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderRight(true).
+		BorderForeground(m.Theme.Palette.Border).
+		Render(rawSide)
+	detPadded := lipgloss.NewStyle().PaddingLeft(1).Render(det)
+	pane := lipgloss.JoinHorizontal(lipgloss.Top, side, detPadded)
 	if m.ConfirmMode {
 		confirmMsg := "soft-delete?"
 		if m.ConfirmHard {

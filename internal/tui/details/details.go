@@ -23,23 +23,34 @@ func (m Model) View(n *model.Node) string {
 	if width <= 0 {
 		width = 80
 	}
-	body := "# " + n.Title() + "\n\n" + n.Body
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(m.Theme.Palette.Accent).
+		Bold(true).
+		Padding(1, 2)
+	title := titleStyle.Render(n.Title())
+
+	rule := lipgloss.NewStyle().
+		Foreground(m.Theme.Palette.Border).
+		Render(strings.Repeat("─", width))
+
+	body := n.Body
 	if len(n.Children) > 0 {
 		body += "\n\n## Subtasks\n\n" + m.synthesizeChildren(n)
 	}
-	style := m.Theme.GlamourStyle()
+
+	rendered := body
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStyles(style),
+		glamour.WithStyles(m.Theme.GlamourStyle()),
 		glamour.WithWordWrap(width),
 	)
-	if err != nil {
-		return body
+	if err == nil {
+		if out, rerr := r.Render(body); rerr == nil {
+			rendered = strings.TrimRight(out, "\n")
+		}
 	}
-	out, err := r.Render(body)
-	if err != nil {
-		return body
-	}
-	return strings.TrimRight(out, "\n")
+
+	return title + "\n" + rule + "\n" + rendered
 }
 
 func (m Model) synthesizeChildren(n *model.Node) string {
