@@ -117,6 +117,38 @@ func TestGChordQuickNew(t *testing.T) {
 	}
 }
 
+func TestActionRunsAsync(t *testing.T) {
+	tree, th, cfg := setup(t)
+	reg := action.NewRegistry(map[string]config.ActionDef{
+		"echo": {Cmd: "echo hi", Keybind: "e"}, // 'e' is normally Edit; ActionByKey shadows
+	})
+	m := New(tree, th, cfg, reg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Triggering the keybind returns a tea.Cmd; ActionRunning is set
+	// before the result arrives.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	if m.ActionRunning == "" {
+		t.Fatalf("expected ActionRunning to be set before the result arrives")
+	}
+	if cmd == nil {
+		t.Fatalf("expected a tea.Cmd to be returned (the async runner)")
+	}
+
+	// Execute the command synchronously to retrieve the actionDoneMsg.
+	msg := cmd()
+	if _, ok := msg.(actionDoneMsg); !ok {
+		t.Fatalf("expected actionDoneMsg, got %T", msg)
+	}
+	m.Update(msg)
+	if m.ActionRunning != "" {
+		t.Errorf("ActionRunning should clear after completion")
+	}
+	if m.ActionOut == nil || !strings.Contains(m.ActionOut.Stdout, "hi") {
+		t.Errorf("expected stdout to contain 'hi', got %+v", m.ActionOut)
+	}
+}
+
 func TestStatusBandSort(t *testing.T) {
 	dir := t.TempDir()
 	tree, _ := store.Load(dir)

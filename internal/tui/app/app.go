@@ -41,6 +41,20 @@ const (
 
 type editorClosedMsg struct{}
 
+type actionDoneMsg struct {
+	Name   string
+	Result action.Result
+}
+
+// runActionCmd executes the action in a goroutine and emits actionDoneMsg
+// when complete so the TUI stays responsive while shell commands run.
+func runActionCmd(act action.Action, n *model.Node) tea.Cmd {
+	return func() tea.Msg {
+		res, _ := act.Run(n)
+		return actionDoneMsg{Name: act.Name, Result: res}
+	}
+}
+
 type Model struct {
 	Tree    *store.Tree
 	Theme   *theme.Theme
@@ -76,8 +90,9 @@ type Model struct {
 	ActionReg   *action.Registry
 	PaletteMode bool
 	Palette     palette.Model
-	ActionOut   *action.Result
-	ActionByKey map[string]action.Action
+	ActionOut       *action.Result
+	ActionByKey     map[string]action.Action
+	ActionRunning   string // name of the action currently executing, "" when idle
 
 	HelpMode bool
 
@@ -286,6 +301,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_ = m.Tree.Reload()
 		m.restoreNav(savedCurrent, savedSelected)
 		return m, nil
+	case actionDoneMsg:
+		res := msg.Result
+		m.ActionOut = &res
+		m.ActionRunning = ""
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
@@ -414,9 +434,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.PromptMode == promptNone {
 			if act, ok := m.ActionByKey[msg.String()]; ok {
 				if sel := m.selectedNode(); sel != nil {
-					res, _ := act.Run(sel)
-					m.ActionOut = &res
-					return m, nil
+					m.ActionRunning = act.Name
+					return m, runActionCmd(act, sel)
 				}
 			}
 		}
@@ -672,10 +691,9 @@ func (m *Model) paletteItems() []palette.Item {
 				Name: act.Name,
 				Hint: act.Def.Cmd,
 				Run: func() tea.Cmd {
-					res, _ := act.Run(sel)
-					m.ActionOut = &res
+					m.ActionRunning = act.Name
 					m.PaletteMode = false
-					return nil
+					return runActionCmd(act, sel)
 				},
 			})
 		}
@@ -717,6 +735,11 @@ func (m *Model) View() string {
 			Render(confirmMsg + " [y/N]")
 	case m.PromptMode != promptNone:
 		bottom = m.Prompt.View()
+	case m.ActionRunning != "":
+		bottom = lipgloss.NewStyle().
+			Foreground(m.Theme.Status.Doing).
+			Italic(true).
+			Render("running " + m.ActionRunning + "…")
 	case m.ActionOut != nil:
 		out := fmt.Sprintf("exit=%d\n%s\n%s",
 			m.ActionOut.ExitCode, m.ActionOut.Stdout, m.ActionOut.Stderr)
