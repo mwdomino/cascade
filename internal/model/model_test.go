@@ -26,6 +26,35 @@ func TestStatusValid(t *testing.T) {
 	}
 }
 
+func TestEffectiveTypeFallback(t *testing.T) {
+	root := &Node{}
+	project := &Node{Slug: "p", Parent: root}
+	root.Children = []*Node{project}
+	folder := &Node{Slug: "f", Parent: project}
+	project.Children = []*Node{folder}
+	task := &Node{Slug: "t", Parent: folder}
+	folder.Children = []*Node{task}
+
+	if got := project.EffectiveType(); got != TypeProject {
+		t.Errorf("top-level: got %q, want project", got)
+	}
+	if got := folder.EffectiveType(); got != TypeFolder {
+		t.Errorf("with children: got %q, want folder", got)
+	}
+	if got := task.EffectiveType(); got != TypeTask {
+		t.Errorf("leaf: got %q, want task", got)
+	}
+}
+
+func TestEffectiveTypeExplicit(t *testing.T) {
+	root := &Node{}
+	leaf := &Node{Slug: "x", Parent: root, FM: Frontmatter{Type: TypeTask}}
+	root.Children = []*Node{leaf}
+	if got := leaf.EffectiveType(); got != TypeTask {
+		t.Errorf("explicit type ignored: got %q", got)
+	}
+}
+
 func TestNodeProgress(t *testing.T) {
 	parent := &Node{Slug: "p"}
 	parent.Children = []*Node{

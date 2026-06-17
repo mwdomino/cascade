@@ -114,9 +114,11 @@ func (m *Model) visibleSiblings() []*model.Node {
 	if !m.ShowDone {
 		filtered := make([]*model.Node, 0, len(sibs))
 		for _, n := range sibs {
-			if n.FM.Status != model.StatusDone {
-				filtered = append(filtered, n)
+			// Containers stay visible; only done tasks are hidden.
+			if n.EffectiveType() == model.TypeTask && n.FM.Status == model.StatusDone {
+				continue
 			}
+			filtered = append(filtered, n)
 		}
 		sibs = filtered
 	}
@@ -409,7 +411,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ShowDone = !m.ShowDone
 		case key.Matches(msg, m.Keys.StatusCycle):
 			if n := m.selectedNode(); n != nil {
-				if err := m.Tree.SetStatus(n, n.FM.Status.Cycle()); err != nil {
+				if n.IsContainer() {
+					m.ActionOut = &action.Result{
+						Stderr:   "status only applies to tasks, not " + string(n.EffectiveType()) + "s",
+						ExitCode: 1,
+					}
+				} else if err := m.Tree.SetStatus(n, n.FM.Status.Cycle()); err != nil {
 					m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
 				}
 			}
@@ -779,6 +786,8 @@ func (m *Model) helpOverlay() string {
 		row("q / ctrl+c", "quit"),
 		"",
 		hintStyle.Render("tip: drill in with l, then n adds a child at that tier"),
+		hintStyle.Render("types: top-level=project (■), with-children=folder (▸), leaves=task (○ ◐ ✓ ✗)"),
+		hintStyle.Render("override with `type: project|folder|task` in frontmatter"),
 		hintStyle.Render("(any key to close)"),
 	}, "\n")
 

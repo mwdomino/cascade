@@ -57,7 +57,7 @@ func (m Model) synthesizeChildren(n *model.Node) string {
 	var b strings.Builder
 	for _, c := range n.Children {
 		b.WriteString("- ")
-		b.WriteString(m.Theme.StatusGlyph(c.FM.Status))
+		b.WriteString(m.Theme.NodeGlyph(c))
 		b.WriteString(" ")
 		b.WriteString(c.Title())
 		if d, total := c.ProgressDoneTotal(); total > 0 {

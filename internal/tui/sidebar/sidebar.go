@@ -63,7 +63,7 @@ func (m Model) emptyHint() string {
 }
 
 func (m Model) renderRow(n *model.Node, selected bool) string {
-	glyph := m.Theme.StatusGlyph(n.FM.Status)
+	glyph := m.Theme.NodeGlyph(n)
 	title := n.Title()
 	progress := ""
 	if done, total := n.ProgressDoneTotal(); total > 0 {
@@ -71,8 +71,17 @@ func (m Model) renderRow(n *model.Node, selected bool) string {
 			Foreground(m.Theme.Palette.Dim).
 			Render(fmt.Sprintf("  [%d/%d]", done, total))
 	}
-	dim := n.FM.Status == model.StatusDone
-	titleStyle := lipgloss.NewStyle().Foreground(m.Theme.Palette.Fg)
+	// Only tasks get dim+strike when done; container types stay legible.
+	dim := n.EffectiveType() == model.TypeTask && n.FM.Status == model.StatusDone
+	var titleStyle lipgloss.Style
+	switch n.EffectiveType() {
+	case model.TypeProject:
+		titleStyle = lipgloss.NewStyle().Foreground(m.Theme.Palette.Accent).Bold(true)
+	case model.TypeFolder:
+		titleStyle = lipgloss.NewStyle().Foreground(m.Theme.Palette.Fg).Bold(true)
+	default:
+		titleStyle = lipgloss.NewStyle().Foreground(m.Theme.Palette.Fg)
+	}
 	if dim {
 		titleStyle = titleStyle.Foreground(m.Theme.Palette.Dim).Strikethrough(true)
 	}

@@ -34,9 +34,26 @@ func (s Status) Cycle() Status {
 	}
 }
 
+type NodeType string
+
+const (
+	TypeProject NodeType = "project"
+	TypeFolder  NodeType = "folder"
+	TypeTask    NodeType = "task"
+)
+
+func (t NodeType) Valid() bool {
+	switch t {
+	case TypeProject, TypeFolder, TypeTask:
+		return true
+	}
+	return false
+}
+
 type Frontmatter struct {
 	Title   string         `yaml:"title"`
 	Status  Status         `yaml:"status"`
+	Type    NodeType       `yaml:"type,omitempty"`
 	Created time.Time      `yaml:"created"`
 	Updated time.Time      `yaml:"updated"`
 	Tags    []string       `yaml:"tags,omitempty"`
@@ -68,6 +85,34 @@ func (n *Node) Depth() int {
 		d++
 	}
 	return d
+}
+
+// EffectiveType returns the explicit Frontmatter.Type if set, otherwise
+// derives a sensible default from position and shape:
+//   - top-level (parent is the synthetic root) → project
+//   - has children → folder
+//   - leaf → task
+//
+// The synthetic root itself returns TypeFolder.
+func (n *Node) EffectiveType() NodeType {
+	if n.FM.Type.Valid() {
+		return n.FM.Type
+	}
+	if n.IsRoot() {
+		return TypeFolder
+	}
+	if n.Parent != nil && n.Parent.IsRoot() {
+		return TypeProject
+	}
+	if len(n.Children) > 0 {
+		return TypeFolder
+	}
+	return TypeTask
+}
+
+func (n *Node) IsContainer() bool {
+	t := n.EffectiveType()
+	return t == TypeProject || t == TypeFolder
 }
 
 func (n *Node) ProgressDoneTotal() (done, total int) {

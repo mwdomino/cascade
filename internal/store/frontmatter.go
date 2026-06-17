@@ -31,6 +31,10 @@ func ReadIndex(path string) (model.Frontmatter, string, error) {
 			if s, ok := v.(string); ok {
 				fm.Status = model.Status(s)
 			}
+		case "type":
+			if s, ok := v.(string); ok {
+				fm.Type = model.NodeType(s)
+			}
 		case "created":
 			fm.Created = coerceTime(v)
 		case "updated":
@@ -57,6 +61,9 @@ func WriteIndex(path string, fm model.Frontmatter, body string) error {
 	}
 	if fm.Status != "" {
 		out["status"] = string(fm.Status)
+	}
+	if fm.Type != "" {
+		out["type"] = string(fm.Type)
 	}
 	out["created"] = fm.Created.Format(time.RFC3339)
 	out["updated"] = fm.Updated.Format(time.RFC3339)

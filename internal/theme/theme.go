@@ -90,6 +90,19 @@ func decodeFromMap(m map[string]any) (*Theme, error) {
 	return &th, nil
 }
 
+// NodeGlyph picks the right glyph for a node: status icon for tasks,
+// container icon for folders/projects.
+func (t *Theme) NodeGlyph(n *model.Node) string {
+	switch n.EffectiveType() {
+	case model.TypeProject:
+		return lipgloss.NewStyle().Foreground(t.Palette.Accent).Bold(true).Render("■")
+	case model.TypeFolder:
+		return lipgloss.NewStyle().Foreground(t.Palette.Dim).Render("▸")
+	default:
+		return t.StatusGlyph(n.FM.Status)
+	}
+}
+
 func (t *Theme) StatusGlyph(s model.Status) string {
 	var (
 		color lipgloss.Color

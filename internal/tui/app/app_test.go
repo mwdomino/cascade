@@ -139,12 +139,40 @@ func TestStatusCycle(t *testing.T) {
 	tree, th, cfg := setup(t)
 	tm := teatest.NewTestModel(t, newModel(tree, th, cfg),
 		teatest.WithInitialTermSize(120, 40))
+	// Drill into "work" (a project) so the cursor lands on its task child.
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}) // todo -> doing
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
-	first := tree.Root.Children[0]
-	if first.FM.Status != model.StatusDoing {
-		t.Errorf("status = %q, want doing", first.FM.Status)
+
+	var work *model.Node
+	for _, c := range tree.Root.Children {
+		if c.Slug == "work" {
+			work = c
+		}
+	}
+	if work == nil || len(work.Children) == 0 {
+		t.Fatal("expected work to have children")
+	}
+	if work.Children[0].FM.Status != model.StatusDoing {
+		t.Errorf("status = %q, want doing", work.Children[0].FM.Status)
+	}
+}
+
+func TestStatusCycleRejectedOnContainer(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	// Cursor is on a top-level node which defaults to project.
+	if m.selectedNode() == nil || !m.selectedNode().IsContainer() {
+		t.Fatalf("expected selection to be a container, got %v", m.selectedNode())
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if m.selectedNode().FM.Status == model.StatusDoing {
+		t.Error("status cycle should be a no-op on a container")
+	}
+	if m.ActionOut == nil || !strings.Contains(m.ActionOut.Stderr, "tasks") {
+		t.Errorf("expected stderr to mention tasks, got %+v", m.ActionOut)
 	}
 }
 
@@ -201,10 +229,13 @@ func TestPaletteRefresh(t *testing.T) {
 func TestZHideDoneStableCursor(t *testing.T) {
 	dir := t.TempDir()
 	tree, _ := store.Load(dir)
-	tree.Create(tree.Root, "Alpha")
+	alpha, _ := tree.Create(tree.Root, "Alpha")
+	alpha.FM.Type = model.TypeTask
 	beta, _ := tree.Create(tree.Root, "Beta")
+	beta.FM.Type = model.TypeTask
 	tree.SetStatus(beta, model.StatusDone)
-	tree.Create(tree.Root, "Gamma")
+	gamma, _ := tree.Create(tree.Root, "Gamma")
+	gamma.FM.Type = model.TypeTask
 	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
 	m := &Model{
 		Tree:     tree,
