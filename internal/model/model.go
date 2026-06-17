@@ -89,10 +89,12 @@ func (n *Node) Depth() int {
 
 // EffectiveType returns the explicit Frontmatter.Type if set, otherwise
 // derives a sensible default from position and shape:
-//   - top-level (parent is the synthetic root) → project
-//   - has children → folder
-//   - leaf → task
+//   - top-level with children → project
+//   - non-top-level with children → folder
+//   - leaf (any depth) → task
 //
+// A top-level leaf is a task, not a project, so the user can mark it done
+// with x. Once it sprouts children it becomes a project automatically.
 // The synthetic root itself returns TypeFolder.
 func (n *Node) EffectiveType() NodeType {
 	if n.FM.Type.Valid() {
@@ -101,13 +103,13 @@ func (n *Node) EffectiveType() NodeType {
 	if n.IsRoot() {
 		return TypeFolder
 	}
+	if len(n.Children) == 0 {
+		return TypeTask
+	}
 	if n.Parent != nil && n.Parent.IsRoot() {
 		return TypeProject
 	}
-	if len(n.Children) > 0 {
-		return TypeFolder
-	}
-	return TypeTask
+	return TypeFolder
 }
 
 func (n *Node) IsContainer() bool {
@@ -137,7 +139,7 @@ func (n *Node) EffectivelyDone() bool {
 func (n *Node) ProgressDoneTotal() (done, total int) {
 	for _, c := range n.Children {
 		total++
-		if c.FM.Status == StatusDone {
+		if c.EffectivelyDone() {
 			done++
 		}
 	}
