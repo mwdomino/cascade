@@ -93,6 +93,35 @@ func TestHelpToggle(t *testing.T) {
 	}
 }
 
+func TestDrillIntoEmptyContainer(t *testing.T) {
+	dir := t.TempDir()
+	tree, _ := store.Load(dir)
+	tree.Create(tree.Root, "Project A") // top-level, no children
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := newModel(tree, th, &config.Config{}).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Press l on the empty project — must drill in.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.Current == nil || m.Current.Slug != "project-a" {
+		t.Fatalf("l on empty project must drill in; current=%v", m.Current)
+	}
+
+	// Now press n + type + Enter → child should be created INSIDE project-a.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	for _, r := range "First Note" {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if len(m.Current.Children) != 1 || m.Current.Children[0].Slug != "first-note" {
+		t.Errorf("expected child created under project-a, got %+v", m.Current.Children)
+	}
+	if l := len(tree.Root.Children); l != 1 {
+		t.Errorf("root should still have 1 child, got %d", l)
+	}
+}
+
 func TestEnterOnDotDotAscends(t *testing.T) {
 	tree, th, cfg := setup(t)
 	// setup creates "work" (with children "ship-v1", "fix-bug") and "personal".

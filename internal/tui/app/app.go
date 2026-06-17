@@ -388,7 +388,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.goUp()
 				return m, nil
 			}
-			if n := m.selectedNode(); n != nil && len(n.Children) > 0 {
+			// Drill into anything (even empty containers and leaves) so the user
+			// can always add children. A leaf turns into a folder once it has one.
+			if n := m.selectedNode(); n != nil {
 				m.Current = n
 				m.Cursor = m.initialDrillCursor()
 			}
