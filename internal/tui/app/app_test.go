@@ -93,6 +93,35 @@ func TestHelpToggle(t *testing.T) {
 	}
 }
 
+func TestEnterOnDotDotAscends(t *testing.T) {
+	tree, th, cfg := setup(t)
+	// setup creates "work" (with children "ship-v1", "fix-bug") and "personal".
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	// Drill into "work" (first root child).
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.Current.Slug != "work" {
+		t.Fatalf("expected to be inside work, got %q", m.Current.Slug)
+	}
+	// Cursor should be on the first real child after drilling in.
+	if m.cursorIsDotDot() {
+		t.Errorf("cursor unexpectedly on `..` right after drilling in")
+	}
+	// gg jumps to top → that's `..`.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if !m.cursorIsDotDot() {
+		t.Errorf("gg should land cursor on `..`")
+	}
+	// Enter on `..` goes up.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.Current != tree.Root {
+		t.Errorf("Enter on `..` should ascend to root, got %q", m.Current.Slug)
+	}
+	if m.selectedNode() == nil || m.selectedNode().Slug != "work" {
+		t.Errorf("after ascend, cursor should land on 'work', got %v", m.selectedNode())
+	}
+}
+
 func TestHintBarDefault(t *testing.T) {
 	tree, th, cfg := setup(t)
 	m := newModel(tree, th, cfg).(*Model)

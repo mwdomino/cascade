@@ -125,10 +125,89 @@ func (m *Model) visibleSiblings() []*model.Node {
 
 func (m *Model) selectedNode() *model.Node {
 	sibs := m.visibleSiblings()
-	if len(sibs) == 0 || m.Cursor < 0 || m.Cursor >= len(sibs) {
+	idx := m.childIndex()
+	if idx < 0 || idx >= len(sibs) {
 		return nil
 	}
-	return sibs[m.Cursor]
+	return sibs[idx]
+}
+
+// hasDotDot reports whether a `..` row should appear at the top of the sidebar.
+// Suppressed in global-search results and when a local filter is active so the
+// match list isn't interrupted.
+func (m *Model) hasDotDot() bool {
+	if m.GlobalMode || m.LocalQuery != "" {
+		return false
+	}
+	return m.Current != nil && m.Current.Parent != nil
+}
+
+func (m *Model) totalRows() int {
+	n := len(m.visibleSiblings())
+	if m.hasDotDot() {
+		n++
+	}
+	return n
+}
+
+func (m *Model) cursorMax() int {
+	n := m.totalRows()
+	if n <= 0 {
+		return 0
+	}
+	return n - 1
+}
+
+func (m *Model) cursorIsDotDot() bool {
+	return m.hasDotDot() && m.Cursor == 0
+}
+
+// childIndex maps the unified Cursor to an index into visibleSiblings(),
+// or -1 when the cursor is on the synthetic `..` row.
+func (m *Model) childIndex() int {
+	if m.cursorIsDotDot() {
+		return -1
+	}
+	if m.hasDotDot() {
+		return m.Cursor - 1
+	}
+	return m.Cursor
+}
+
+// cursorAtChild returns the cursor position that points at `target` within
+// m.Current.Children, accounting for an optional `..` row.
+func (m *Model) cursorAtChild(target *model.Node) int {
+	for i, c := range m.Current.Children {
+		if c == target {
+			if m.hasDotDot() {
+				return i + 1
+			}
+			return i
+		}
+	}
+	if m.hasDotDot() {
+		return 1
+	}
+	return 0
+}
+
+// initialDrillCursor returns the starting cursor for a freshly-entered tier:
+// the first real child (skipping `..` if present), or 0 if empty.
+func (m *Model) initialDrillCursor() int {
+	if m.hasDotDot() && len(m.visibleSiblings()) > 0 {
+		return 1
+	}
+	return 0
+}
+
+// goUp moves to the parent tier and positions the cursor on the node we came from.
+func (m *Model) goUp() {
+	if m.Current == nil || m.Current.Parent == nil {
+		return
+	}
+	prev := m.Current
+	m.Current = m.Current.Parent
+	m.Cursor = m.cursorAtChild(prev)
 }
 
 // restoreNav attempts to restore Current and Cursor to the saved paths after a
@@ -213,8 +292,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						err = m.Tree.SoftDelete(n)
 					}
-					if err == nil && m.Cursor >= len(m.Current.Children) && m.Cursor > 0 {
-						m.Cursor--
+					if err == nil && m.Cursor > m.cursorMax() {
+						m.Cursor = m.cursorMax()
 					}
 				}
 				m.ConfirmMode = false
@@ -289,7 +368,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Cursor--
 			}
 		case key.Matches(msg, m.Keys.Down):
-			if m.Cursor < len(m.visibleSiblings())-1 {
+			if m.Cursor < m.cursorMax() {
 				m.Cursor++
 			}
 		case key.Matches(msg, m.Keys.In):
@@ -297,40 +376,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.GlobalMatches) > 0 && m.Cursor < len(m.GlobalMatches) {
 					target := m.GlobalMatches[m.Cursor]
 					m.Current = target.Parent
-					for i, s := range m.Current.Children {
-						if s == target {
-							m.Cursor = i
-							break
-						}
-					}
+					m.Cursor = m.cursorAtChild(target)
 					m.GlobalMode = false
 					m.GlobalMatches = nil
 				}
 				return m, nil
 			}
+			if m.cursorIsDotDot() {
+				m.goUp()
+				return m, nil
+			}
 			if n := m.selectedNode(); n != nil && len(n.Children) > 0 {
 				m.Current = n
-				m.Cursor = 0
+				m.Cursor = m.initialDrillCursor()
 			}
 		case key.Matches(msg, m.Keys.Out):
-			if m.Current.Parent != nil {
-				prev := m.Current
-				m.Current = m.Current.Parent
-				for i, s := range m.Current.Children {
-					if s == prev {
-						m.Cursor = i
-						break
-					}
-				}
-			}
+			m.goUp()
 		case key.Matches(msg, m.Keys.Top):
 			m.Cursor = 0
 		case key.Matches(msg, m.Keys.Bottom):
-			if n := len(m.visibleSiblings()); n > 0 {
-				m.Cursor = n - 1
-			} else {
-				m.Cursor = 0
-			}
+			m.Cursor = m.cursorMax()
 		case key.Matches(msg, m.Keys.Refresh):
 			savedCurrent := m.Current.Path
 			savedSelected := ""
@@ -350,13 +415,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case key.Matches(msg, m.Keys.MoveUp):
 			if n := m.selectedNode(); n != nil {
-				if err := m.Tree.MoveUp(n); err == nil && m.Cursor > 0 {
+				if err := m.Tree.MoveUp(n); err == nil && m.childIndex() > 0 {
 					m.Cursor--
 				}
 			}
 		case key.Matches(msg, m.Keys.MoveDown):
 			if n := m.selectedNode(); n != nil {
-				if err := m.Tree.MoveDown(n); err == nil && m.Cursor < len(m.Current.Children)-1 {
+				if err := m.Tree.MoveDown(n); err == nil && m.childIndex() < len(m.Current.Children)-1 {
 					m.Cursor++
 				}
 			}
@@ -551,7 +616,7 @@ func (m *Model) View() string {
 	}
 
 	head := m.Breadcrumb.View(m.Current)
-	rawSide := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone)
+	rawSide := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone, m.hasDotDot())
 	det := m.Details.View(m.selectedNode())
 
 	sideHeight := m.Sidebar.Height
@@ -651,9 +716,9 @@ func (m *Model) helpOverlay() string {
 		"",
 		section.Render("NAVIGATION"),
 		row("j / k / ↑ ↓", "move cursor"),
-		row("l / enter", "drill into selected"),
+		row("l / enter", "drill into selected (or `..` to go up)"),
 		row("h", "go back up"),
-		row("gg / G", "top / bottom"),
+		row("gg / G", "top / bottom (gg jumps to `..` if shown)"),
 		row("R", "refresh from disk"),
 		"",
 		section.Render("CAPTURE & EDIT"),

@@ -15,17 +15,38 @@ type Model struct {
 	Height int
 }
 
-func (m Model) View(items []*model.Node, cursor int, showDone bool) string {
+func (m Model) View(items []*model.Node, cursor int, showDone bool, showDotDot bool) string {
+	var b strings.Builder
+	offset := 0
+	if showDotDot {
+		b.WriteString(m.renderDotDot(cursor == 0))
+		b.WriteString("\n")
+		offset = 1
+	}
 	if len(items) == 0 {
+		if showDotDot {
+			return b.String() + m.emptyHint()
+		}
 		return m.emptyHint()
 	}
-	var b strings.Builder
 	for i, it := range items {
-		row := m.renderRow(it, i == cursor)
+		row := m.renderRow(it, i+offset == cursor)
 		b.WriteString(row)
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func (m Model) renderDotDot(selected bool) string {
+	text := lipgloss.NewStyle().
+		Foreground(m.Theme.Palette.Dim).
+		Render("..  (go up)")
+	if selected {
+		return lipgloss.NewStyle().
+			Background(m.Theme.Selection.CursorBg).
+			Render("> " + text)
+	}
+	return "  " + text
 }
 
 func (m Model) emptyHint() string {
