@@ -207,23 +207,24 @@ Actions are shell commands invoked via the `:` palette or a bound key. cascade i
 
 ## Roadmap
 
-Done since v1:
+Highlights since v0.1.0:
+
 - `..` filesystem-style up navigation
-- project / folder / task types with positional fallback and rollup
+- project / folder / task types with positional fallback and auto-rollup to done
 - which-key help overlay (`?`) and mode-aware hint bar
 - per-level heading colors (H1–H6) and styled task checkboxes
 - stable layout — overlays no longer push the view upward
-- centered palette modal
+- centered palette modal + centered fuzzy picker for move-to (`m`)
+- scrollable details pane (`ctrl+d/u`, `pgdn/pgup`)
+- proper `gg` / `gn` two-key chord handling
+- four built-in themes (`dracula`, `gruvbox`, `tokyonight`, `nord`)
+- status-band sort within a tier (doing → blocked → todo → done)
+- async action execution — slow shell commands don't freeze the TUI
+- inline checkbox toggling (`t`) — flip `- [ ]` items without opening `$EDITOR`
+- edit body in `$EDITOR` with frontmatter hidden, merged back on save
+- glamour renderer caching — ~118× faster per-frame for repeated views
 
-Open ideas:
-- fsnotify auto-reload on external edits
-- scrollable details pane (long bodies currently clip at the bottom)
-- proper `gg` / `gn` chord handling
-- additional built-in themes (gruvbox, tokyonight, nord)
-- sort within a tier by status
-- async action execution (don't freeze the TUI while `gh` runs)
-- configurable keybindings via yaml
-- inline checkbox toggling for `- [ ]` items in the body
+See [`TODO.md`](TODO.md) for the open backlog: fsnotify auto-reload, configurable keybindings, undo, bulk select, and a handful of smaller polish items.
 
 ## License
 
