@@ -68,6 +68,46 @@ func TestToggleShowDone(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
 }
 
+func TestStatusCycle(t *testing.T) {
+	tree, th, cfg := setup(t)
+	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+		teatest.WithInitialTermSize(120, 40))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}) // todo -> doing
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+	first := tree.Root.Children[0]
+	if first.FM.Status != model.StatusDoing {
+		t.Errorf("status = %q, want doing", first.FM.Status)
+	}
+}
+
+func TestReorderKJ(t *testing.T) {
+	tree, th, cfg := setup(t)
+	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+		teatest.WithInitialTermSize(120, 40))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // cursor → Personal
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}}) // swap with Work
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+	if tree.Root.Children[0].Slug != "personal" {
+		t.Errorf("after reorder first = %q", tree.Root.Children[0].Slug)
+	}
+}
+
+func TestSoftDeleteFlow(t *testing.T) {
+	tree, th, cfg := setup(t)
+	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+		teatest.WithInitialTermSize(120, 40))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+	if len(tree.Root.Children) != 1 {
+		t.Errorf("expected 1 sibling, got %d", len(tree.Root.Children))
+	}
+}
+
 func TestCaptureNewTask(t *testing.T) {
 	tree, th, cfg := setup(t)
 	tm := teatest.NewTestModel(t, New(tree, th, cfg),

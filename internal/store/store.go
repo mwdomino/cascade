@@ -228,6 +228,21 @@ func (t *Tree) purgeByPath(n *model.Node) {
 	}
 }
 
+func (t *Tree) AllNodes() []*model.Node {
+	var out []*model.Node
+	var walk func(n *model.Node)
+	walk = func(n *model.Node) {
+		if !n.IsRoot() {
+			out = append(out, n)
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(t.Root)
+	return out
+}
+
 func (t *Tree) Reload() error {
 	newTree, err := Load(t.TasksDir)
 	if err != nil {

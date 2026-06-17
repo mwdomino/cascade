@@ -102,6 +102,16 @@ func TestSetStatus(t *testing.T) {
 	}
 }
 
+func TestAllNodes(t *testing.T) {
+	tree := newTree(t)
+	a, _ := tree.Create(tree.Root, "A")
+	tree.Create(a, "A1")
+	tree.Create(tree.Root, "B")
+	if len(tree.AllNodes()) != 3 {
+		t.Errorf("got %d nodes", len(tree.AllNodes()))
+	}
+}
+
 func TestSoftDeletePurgesDescendants(t *testing.T) {
 	tree := newTree(t)
 	parent, _ := tree.Create(tree.Root, "parent")

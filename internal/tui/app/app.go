@@ -1,12 +1,16 @@
 package app
 
 import (
+	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mwdomino/cascade/internal/config"
+	"github.com/mwdomino/cascade/internal/editor"
 	"github.com/mwdomino/cascade/internal/model"
 	"github.com/mwdomino/cascade/internal/store"
 	"github.com/mwdomino/cascade/internal/theme"
@@ -15,6 +19,7 @@ import (
 	"github.com/mwdomino/cascade/internal/tui/keys"
 	"github.com/mwdomino/cascade/internal/tui/prompt"
 	"github.com/mwdomino/cascade/internal/tui/sidebar"
+	"github.com/sahilm/fuzzy"
 )
 
 type promptMode int
@@ -24,7 +29,10 @@ const (
 	promptNew
 	promptQuickNew
 	promptRename
+	promptMoveTo
 )
+
+type editorClosedMsg struct{}
 
 type Model struct {
 	Tree    *store.Tree
@@ -41,6 +49,12 @@ type Model struct {
 
 	PromptMode promptMode
 	Prompt     prompt.Model
+
+	// Confirm overlay state
+	ConfirmMode bool
+	ConfirmHard bool
+	PendingDD   bool
+	DDDeadline  time.Time
 
 	Width, Height int
 }
@@ -73,6 +87,11 @@ func (m *Model) selectedNode() *model.Node {
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case editorClosedMsg:
+		_ = m.Tree.Reload()
+		m.Current = m.Tree.Root
+		m.Cursor = 0
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
@@ -85,6 +104,29 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Details.Width = msg.Width - sw - 2
 		m.Details.Height = msg.Height - 2
 	case tea.KeyMsg:
+		// Confirm overlay: handle before everything else.
+		if m.ConfirmMode {
+			switch msg.String() {
+			case "y", "Y", "enter":
+				n := m.selectedNode()
+				if n != nil {
+					var err error
+					if m.ConfirmHard {
+						err = m.Tree.HardDelete(n)
+					} else {
+						err = m.Tree.SoftDelete(n)
+					}
+					if err == nil && m.Cursor >= len(m.Current.Children) && m.Cursor > 0 {
+						m.Cursor--
+					}
+				}
+				m.ConfirmMode = false
+			case "n", "N", "esc":
+				m.ConfirmMode = false
+			}
+			return m, nil
+		}
+
 		// When prompt is active, forward all keys to the prompt except Enter/Esc.
 		if m.PromptMode != promptNone {
 			switch msg.String() {
@@ -99,6 +141,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Prompt, cmd = m.Prompt.Update(msg)
 			return m, cmd
 		}
+
+		// dd double-tap (raw key check before the switch)
+		if msg.String() == "d" {
+			if m.PendingDD && time.Now().Before(m.DDDeadline) {
+				m.PendingDD = false
+				m.ConfirmMode = true
+				m.ConfirmHard = false
+				return m, nil
+			}
+			m.PendingDD = true
+			m.DDDeadline = time.Now().Add(500 * time.Millisecond)
+			return m, nil
+		}
+		// Any non-d key resets the pending dd state.
+		m.PendingDD = false
 
 		switch {
 		case key.Matches(msg, m.Keys.Quit):
@@ -142,6 +199,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case key.Matches(msg, m.Keys.ToggleDone):
 			m.ShowDone = !m.ShowDone
+		case key.Matches(msg, m.Keys.StatusCycle):
+			if n := m.selectedNode(); n != nil {
+				m.Tree.SetStatus(n, n.FM.Status.Cycle())
+			}
+		case key.Matches(msg, m.Keys.MoveUp):
+			if n := m.selectedNode(); n != nil {
+				if err := m.Tree.MoveUp(n); err == nil && m.Cursor > 0 {
+					m.Cursor--
+				}
+			}
+		case key.Matches(msg, m.Keys.MoveDown):
+			if n := m.selectedNode(); n != nil {
+				if err := m.Tree.MoveDown(n); err == nil && m.Cursor < len(m.Current.Children)-1 {
+					m.Cursor++
+				}
+			}
+		case key.Matches(msg, m.Keys.HardDelete):
+			if m.selectedNode() != nil {
+				m.ConfirmMode = true
+				m.ConfirmHard = true
+			}
 		case key.Matches(msg, m.Keys.New):
 			if m.PromptMode == promptNone {
 				m.PromptMode = promptNew
@@ -167,6 +245,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Prompt.Focus()
 				return m, nil
 			}
+		case key.Matches(msg, m.Keys.MoveTo):
+			if m.PromptMode == promptNone && m.selectedNode() != nil {
+				m.PromptMode = promptMoveTo
+				m.Prompt.SetLabel("move to:")
+				m.Prompt.Reset()
+				m.Prompt.Focus()
+				return m, nil
+			}
+		case key.Matches(msg, m.Keys.Edit):
+			if n := m.selectedNode(); n != nil {
+				target := filepath.Join(n.Path, "index.md")
+				return m, tea.ExecProcess(externalEditorCmd(target), func(err error) tea.Msg {
+					return editorClosedMsg{}
+				})
+			}
 		}
 	}
 	return m, nil
@@ -191,6 +284,19 @@ func (m *Model) submitPrompt() tea.Cmd {
 	case promptRename:
 		if val != "" && m.selectedNode() != nil {
 			m.Tree.Rename(m.selectedNode(), val)
+		}
+	case promptMoveTo:
+		if val != "" && m.selectedNode() != nil {
+			candidates := m.Tree.AllNodes()
+			labels := make([]string, len(candidates))
+			for i, c := range candidates {
+				labels[i] = c.Title()
+			}
+			matches := fuzzy.Find(val, labels)
+			if len(matches) > 0 {
+				target := candidates[matches[0].Index]
+				m.Tree.MoveTo(m.selectedNode(), target)
+			}
 		}
 	}
 	m.PromptMode = promptNone
@@ -222,12 +328,30 @@ func (m *Model) inboxNode() *model.Node {
 	return n
 }
 
+func externalEditorCmd(path string) *exec.Cmd {
+	line := editor.EditorCmd()
+	parts := strings.Fields(line)
+	args := append(parts[1:], path)
+	return exec.Command(parts[0], args...)
+}
+
 func (m *Model) View() string {
 	border := lipgloss.NewStyle().Foreground(m.Theme.Palette.Border)
 	head := m.Breadcrumb.View(m.Current)
 	side := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone)
 	det := m.Details.View(m.selectedNode())
 	pane := lipgloss.JoinHorizontal(lipgloss.Top, side, border.Render(" │ "), det)
+	if m.ConfirmMode {
+		confirmMsg := "soft-delete?"
+		if m.ConfirmHard {
+			confirmMsg = "HARD DELETE? (cannot be undone)"
+		}
+		bar := lipgloss.NewStyle().
+			Foreground(m.Theme.Status.Blocked).
+			Bold(true).
+			Render(confirmMsg + " [y/N]")
+		return head + "\n" + pane + "\n" + bar
+	}
 	if m.PromptMode != promptNone {
 		return head + "\n" + pane + "\n" + m.Prompt.View()
 	}
