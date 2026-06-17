@@ -108,6 +108,17 @@ func TestSoftDeleteFlow(t *testing.T) {
 	}
 }
 
+func TestLocalSearch(t *testing.T) {
+	tree, th, cfg := setup(t)
+	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+		teatest.WithInitialTermSize(120, 40))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	tm.Type("personal")
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+}
+
 func TestCaptureNewTask(t *testing.T) {
 	tree, th, cfg := setup(t)
 	tm := teatest.NewTestModel(t, New(tree, th, cfg),

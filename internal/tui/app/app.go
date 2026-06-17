@@ -18,6 +18,7 @@ import (
 	"github.com/mwdomino/cascade/internal/tui/details"
 	"github.com/mwdomino/cascade/internal/tui/keys"
 	"github.com/mwdomino/cascade/internal/tui/prompt"
+	"github.com/mwdomino/cascade/internal/tui/search"
 	"github.com/mwdomino/cascade/internal/tui/sidebar"
 	"github.com/sahilm/fuzzy"
 )
@@ -25,11 +26,13 @@ import (
 type promptMode int
 
 const (
-	promptNone     promptMode = iota
+	promptNone        promptMode = iota
 	promptNew
 	promptQuickNew
 	promptRename
 	promptMoveTo
+	promptSearchLocal
+	promptSearchGlobal
 )
 
 type editorClosedMsg struct{}
@@ -49,6 +52,11 @@ type Model struct {
 
 	PromptMode promptMode
 	Prompt     prompt.Model
+
+	// Search state
+	LocalQuery    string
+	GlobalMatches []*model.Node
+	GlobalMode    bool
 
 	// Confirm overlay state
 	ConfirmMode bool
@@ -75,7 +83,16 @@ func New(tree *store.Tree, th *theme.Theme, cfg *config.Config) tea.Model {
 
 func (m *Model) Init() tea.Cmd { return nil }
 
-func (m *Model) visibleSiblings() []*model.Node { return m.Current.Children }
+func (m *Model) visibleSiblings() []*model.Node {
+	if m.GlobalMode {
+		return m.GlobalMatches
+	}
+	sibs := m.Current.Children
+	if m.LocalQuery != "" {
+		sibs = search.LocalFilter(sibs, m.LocalQuery)
+	}
+	return sibs
+}
 
 func (m *Model) selectedNode() *model.Node {
 	sibs := m.visibleSiblings()
@@ -142,6 +159,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		// Esc outside prompt clears active search state.
+		if msg.String() == "esc" && (m.LocalQuery != "" || m.GlobalMode) {
+			m.LocalQuery = ""
+			m.GlobalMode = false
+			m.GlobalMatches = nil
+			m.Cursor = 0
+			return m, nil
+		}
+
 		// dd double-tap (raw key check before the switch)
 		if msg.String() == "d" {
 			if m.PendingDD && time.Now().Before(m.DDDeadline) {
@@ -169,6 +195,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Cursor++
 			}
 		case key.Matches(msg, m.Keys.In):
+			if m.GlobalMode {
+				if len(m.GlobalMatches) > 0 && m.Cursor < len(m.GlobalMatches) {
+					target := m.GlobalMatches[m.Cursor]
+					m.Current = target.Parent
+					for i, s := range m.Current.Children {
+						if s == target {
+							m.Cursor = i
+							break
+						}
+					}
+					m.GlobalMode = false
+					m.GlobalMatches = nil
+				}
+				return m, nil
+			}
 			if n := m.selectedNode(); n != nil && len(n.Children) > 0 {
 				m.Current = n
 				m.Cursor = 0
@@ -260,6 +301,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return editorClosedMsg{}
 				})
 			}
+		case key.Matches(msg, m.Keys.SearchLocal):
+			if m.PromptMode == promptNone {
+				m.PromptMode = promptSearchLocal
+				m.Prompt.SetLabel("/")
+				m.Prompt.Reset()
+				m.Prompt.Focus()
+				return m, nil
+			}
+		case key.Matches(msg, m.Keys.SearchGlobal):
+			if m.PromptMode == promptNone {
+				m.PromptMode = promptSearchGlobal
+				m.Prompt.SetLabel("?")
+				m.Prompt.Reset()
+				m.Prompt.Focus()
+				return m, nil
+			}
 		}
 	}
 	return m, nil
@@ -298,6 +355,13 @@ func (m *Model) submitPrompt() tea.Cmd {
 				m.Tree.MoveTo(m.selectedNode(), target)
 			}
 		}
+	case promptSearchLocal:
+		m.LocalQuery = val
+		m.Cursor = 0
+	case promptSearchGlobal:
+		m.GlobalMatches = search.GlobalFuzzy(m.Tree.AllNodes(), val)
+		m.GlobalMode = true
+		m.Cursor = 0
 	}
 	m.PromptMode = promptNone
 	m.Prompt.Blur()
