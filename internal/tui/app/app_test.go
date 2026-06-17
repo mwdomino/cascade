@@ -39,3 +39,16 @@ func TestDrillInAndBack(t *testing.T) {
 
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
 }
+
+func TestBottomOnEmpty(t *testing.T) {
+	dir := t.TempDir()
+	tree, _ := store.Load(dir)
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	tm := teatest.NewTestModel(t, New(tree, th, &config.Config{}),
+		teatest.WithInitialTermSize(120, 40))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}}) // Bottom on empty list
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+}

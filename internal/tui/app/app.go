@@ -48,7 +48,7 @@ func (m *Model) visibleSiblings() []*model.Node { return m.Current.Children }
 
 func (m *Model) selectedNode() *model.Node {
 	sibs := m.visibleSiblings()
-	if len(sibs) == 0 || m.Cursor >= len(sibs) {
+	if len(sibs) == 0 || m.Cursor < 0 || m.Cursor >= len(sibs) {
 		return nil
 	}
 	return sibs[m.Cursor]
@@ -98,7 +98,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.Keys.Top):
 			m.Cursor = 0
 		case key.Matches(msg, m.Keys.Bottom):
-			m.Cursor = len(m.visibleSiblings()) - 1
+			if n := len(m.visibleSiblings()); n > 0 {
+				m.Cursor = n - 1
+			} else {
+				m.Cursor = 0
+			}
 		case key.Matches(msg, m.Keys.Refresh):
 			if err := m.Tree.Reload(); err == nil {
 				m.Current = m.Tree.Root
