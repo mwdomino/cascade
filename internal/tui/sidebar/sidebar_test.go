@@ -18,17 +18,33 @@ func mkNode(slug string, s model.Status, kids ...*model.Node) *model.Node {
 	return n
 }
 
-func TestHideDoneByDefault(t *testing.T) {
+func TestDoneItemRenderedWithShowDone(t *testing.T) {
 	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
 	m := Model{Theme: th, Width: 40}
+	// When the caller passes a done item (showDone=true), it should be rendered
+	// with dim/strikethrough styling (sidebar renders exactly what it's given).
 	items := []*model.Node{
 		mkNode("a", model.StatusTodo),
 		mkNode("b", model.StatusDone),
 		mkNode("c", model.StatusDoing),
 	}
+	out := m.View(items, 0, true)
+	if !strings.Contains(out, "b") {
+		t.Errorf("done item should be rendered when passed to View:\n%s", out)
+	}
+}
+
+func TestSidebarRendersExactItems(t *testing.T) {
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := Model{Theme: th, Width: 40}
+	// Filter happens upstream; sidebar renders exactly what it receives.
+	items := []*model.Node{
+		mkNode("a", model.StatusTodo),
+		mkNode("c", model.StatusDoing),
+	}
 	out := m.View(items, 0, false)
-	if strings.Contains(out, "b") {
-		t.Errorf("done item should be hidden:\n%s", out)
+	if !strings.Contains(out, "a") || !strings.Contains(out, "c") {
+		t.Errorf("expected both items rendered:\n%s", out)
 	}
 }
 

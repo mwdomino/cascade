@@ -12,6 +12,7 @@ import (
 	"github.com/mwdomino/cascade/internal/model"
 	"github.com/mwdomino/cascade/internal/store"
 	"github.com/mwdomino/cascade/internal/theme"
+	"github.com/mwdomino/cascade/internal/tui/keys"
 )
 
 func setup(t *testing.T) (*store.Tree, *theme.Theme, *config.Config) {
@@ -134,6 +135,36 @@ func TestPaletteRefresh(t *testing.T) {
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+}
+
+func TestZHideDoneStableCursor(t *testing.T) {
+	dir := t.TempDir()
+	tree, _ := store.Load(dir)
+	tree.Create(tree.Root, "Alpha")
+	beta, _ := tree.Create(tree.Root, "Beta")
+	tree.SetStatus(beta, model.StatusDone)
+	tree.Create(tree.Root, "Gamma")
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := &Model{
+		Tree:     tree,
+		Theme:    th,
+		Cfg:      &config.Config{},
+		Keys:     keys.Default(),
+		Current:  tree.Root,
+		ShowDone: false,
+	}
+	// Send j — should advance past hidden Beta to Gamma
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	got := m.selectedNode()
+	if got == nil {
+		t.Fatal("selectedNode is nil after j")
+	}
+	if got.Slug != "gamma" {
+		t.Errorf("cursor should land on gamma, got %q", got.Slug)
+	}
+	if got.Slug == "beta" {
+		t.Errorf("cursor must not land on hidden done item beta")
+	}
 }
 
 func TestCaptureNewTask(t *testing.T) {

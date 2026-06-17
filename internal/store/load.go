@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/mwdomino/cascade/internal/model"
 )
@@ -43,7 +44,7 @@ func loadChildren(parent *model.Node, byPath map[string]*model.Node) error {
 			continue
 		}
 		name := e.Name()
-		if name == ".trash" || name[0] == '.' {
+		if strings.HasPrefix(name, ".") {
 			continue
 		}
 		prefix, slug, ok := ParsePrefix(name)

@@ -16,26 +16,12 @@ type Model struct {
 }
 
 func (m Model) View(items []*model.Node, cursor int, showDone bool) string {
-	visible := make([]*model.Node, 0, len(items))
-	visibleCursor := 0
-	for i, it := range items {
-		if !showDone && it.FM.Status == model.StatusDone {
-			if i <= cursor && visibleCursor > 0 {
-				visibleCursor--
-			}
-			continue
-		}
-		visible = append(visible, it)
-		if i < cursor {
-			visibleCursor++
-		}
-	}
-	if len(visible) == 0 {
+	if len(items) == 0 {
 		return lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim).Render("(empty)")
 	}
 	var b strings.Builder
-	for i, it := range visible {
-		row := m.renderRow(it, i == visibleCursor)
+	for i, it := range items {
+		row := m.renderRow(it, i == cursor)
 		b.WriteString(row)
 		b.WriteString("\n")
 	}

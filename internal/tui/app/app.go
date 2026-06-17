@@ -109,6 +109,15 @@ func (m *Model) visibleSiblings() []*model.Node {
 	if m.LocalQuery != "" {
 		sibs = search.LocalFilter(sibs, m.LocalQuery)
 	}
+	if !m.ShowDone {
+		filtered := make([]*model.Node, 0, len(sibs))
+		for _, n := range sibs {
+			if n.FM.Status != model.StatusDone {
+				filtered = append(filtered, n)
+			}
+		}
+		sibs = filtered
+	}
 	return sibs
 }
 
@@ -120,12 +129,40 @@ func (m *Model) selectedNode() *model.Node {
 	return sibs[m.Cursor]
 }
 
+// restoreNav attempts to restore Current and Cursor to the saved paths after a
+// tree reload. Falls back to root/0 if the paths no longer exist.
+func (m *Model) restoreNav(savedCurrent, savedSelected string) {
+	restored := m.Tree.NodeAt(savedCurrent)
+	if restored == nil {
+		m.Current = m.Tree.Root
+		m.Cursor = 0
+		return
+	}
+	m.Current = restored
+	if savedSelected != "" {
+		sel := m.Tree.NodeAt(savedSelected)
+		if sel != nil {
+			for i, c := range m.Current.Children {
+				if c == sel {
+					m.Cursor = i
+					return
+				}
+			}
+		}
+	}
+	m.Cursor = 0
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case editorClosedMsg:
+		savedCurrent := m.Current.Path
+		savedSelected := ""
+		if sel := m.selectedNode(); sel != nil {
+			savedSelected = sel.Path
+		}
 		_ = m.Tree.Reload()
-		m.Current = m.Tree.Root
-		m.Cursor = 0
+		m.restoreNav(savedCurrent, savedSelected)
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
@@ -287,15 +324,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Cursor = 0
 			}
 		case key.Matches(msg, m.Keys.Refresh):
+			savedCurrent := m.Current.Path
+			savedSelected := ""
+			if sel := m.selectedNode(); sel != nil {
+				savedSelected = sel.Path
+			}
 			if err := m.Tree.Reload(); err == nil {
-				m.Current = m.Tree.Root
-				m.Cursor = 0
+				m.restoreNav(savedCurrent, savedSelected)
 			}
 		case key.Matches(msg, m.Keys.ToggleDone):
 			m.ShowDone = !m.ShowDone
 		case key.Matches(msg, m.Keys.StatusCycle):
 			if n := m.selectedNode(); n != nil {
-				m.Tree.SetStatus(n, n.FM.Status.Cycle())
+				if err := m.Tree.SetStatus(n, n.FM.Status.Cycle()); err != nil {
+					m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
+				}
 			}
 		case key.Matches(msg, m.Keys.MoveUp):
 			if n := m.selectedNode(); n != nil {
@@ -382,18 +425,24 @@ func (m *Model) submitPrompt() tea.Cmd {
 		if val != "" {
 			if _, err := m.Tree.Create(m.Current, val); err == nil {
 				m.Cursor = len(m.Current.Children) - 1
+			} else {
+				m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
 			}
 		}
 	case promptQuickNew:
 		if val != "" {
 			target := m.inboxNode()
 			if target != nil {
-				m.Tree.Create(target, val)
+				if _, err := m.Tree.Create(target, val); err != nil {
+					m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
+				}
 			}
 		}
 	case promptRename:
 		if val != "" && m.selectedNode() != nil {
-			m.Tree.Rename(m.selectedNode(), val)
+			if err := m.Tree.Rename(m.selectedNode(), val); err != nil {
+				m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
+			}
 		}
 	case promptMoveTo:
 		if val != "" && m.selectedNode() != nil {
@@ -405,7 +454,9 @@ func (m *Model) submitPrompt() tea.Cmd {
 			matches := fuzzy.Find(val, labels)
 			if len(matches) > 0 {
 				target := candidates[matches[0].Index]
-				m.Tree.MoveTo(m.selectedNode(), target)
+				if err := m.Tree.MoveTo(m.selectedNode(), target); err != nil {
+					m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
+				}
 			}
 		}
 	case promptSearchLocal:

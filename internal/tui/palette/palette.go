@@ -56,19 +56,28 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if m.Cur > 0 {
 				m.Cur--
 			}
+			return m, nil
 		case "down":
 			if m.Cur < len(m.filtered())-1 {
 				m.Cur++
 			}
+			return m, nil
 		case "enter":
 			fil := m.filtered()
 			if m.Cur < len(fil) && fil[m.Cur].Run != nil {
 				return m, fil[m.Cur].Run()
 			}
+			return m, nil
 		}
 	}
 	var cmd tea.Cmd
 	m.ti, cmd = m.ti.Update(msg)
+	// After the textinput updates, clamp Cur to the new filtered list length.
+	if n := len(m.filtered()); n == 0 {
+		m.Cur = 0
+	} else if m.Cur >= n {
+		m.Cur = n - 1
+	}
 	return m, cmd
 }
 
