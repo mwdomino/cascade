@@ -1,0 +1,15 @@
+# Binaries
+/cascade
+/bin/
+
+# Test artifacts
+*.test
+*.out
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
