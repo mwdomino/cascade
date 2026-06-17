@@ -1,0 +1,28 @@
+name: nord
+palette:
+  bg: "#2e3440"
+  fg: "#eceff4"
+  dim: "#4c566a"
+  border: "#3b4252"
+  accent: "#88c0d0"
+status:
+  todo: "#4c566a"
+  doing: "#ebcb8b"
+  done: "#a3be8c"
+  blocked: "#bf616a"
+selection:
+  cursor_bg: "#434c5e"
+  search_match: "#d08770"
+markdown:
+  heading: "#88c0d0"
+  heading_h1: "#88c0d0"
+  heading_h2: "#b48ead"
+  heading_h3: "#81a1c1"
+  heading_h4: "#a3be8c"
+  heading_h5: "#ebcb8b"
+  heading_h6: "#d08770"
+  code: "#a3be8c"
+  link: "#81a1c1"
+  list: "#eceff4"
+  checkbox_done: "#a3be8c"
+  checkbox_todo: "#4c566a"

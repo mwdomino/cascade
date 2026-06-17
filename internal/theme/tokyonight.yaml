@@ -1,0 +1,28 @@
+name: tokyonight
+palette:
+  bg: "#1a1b26"
+  fg: "#c0caf5"
+  dim: "#565f89"
+  border: "#3b4261"
+  accent: "#bb9af7"
+status:
+  todo: "#565f89"
+  doing: "#e0af68"
+  done: "#9ece6a"
+  blocked: "#f7768e"
+selection:
+  cursor_bg: "#283457"
+  search_match: "#ff9e64"
+markdown:
+  heading: "#bb9af7"
+  heading_h1: "#bb9af7"
+  heading_h2: "#f7768e"
+  heading_h3: "#7dcfff"
+  heading_h4: "#9ece6a"
+  heading_h5: "#e0af68"
+  heading_h6: "#ff9e64"
+  code: "#9ece6a"
+  link: "#7dcfff"
+  list: "#c0caf5"
+  checkbox_done: "#9ece6a"
+  checkbox_todo: "#565f89"

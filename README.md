@@ -145,7 +145,7 @@ actions:
 
 ## Themes
 
-Dracula ships as the built-in default. You can name another built-in or define one inline:
+Built-in themes: `dracula` (default), `gruvbox`, `tokyonight`, `nord`. Name one or define your own inline:
 
 ```yaml
 theme:

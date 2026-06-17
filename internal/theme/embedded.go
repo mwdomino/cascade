@@ -2,7 +2,9 @@ package theme
 
 import "embed"
 
-//go:embed dracula.yaml
+//go:embed dracula.yaml gruvbox.yaml tokyonight.yaml nord.yaml
 var builtinFS embed.FS
 
-func builtinNames() []string { return []string{"dracula"} }
+func BuiltinNames() []string {
+	return []string{"dracula", "gruvbox", "tokyonight", "nord"}
+}

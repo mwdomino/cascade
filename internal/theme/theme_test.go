@@ -22,6 +22,26 @@ func TestResolveBuiltin(t *testing.T) {
 	}
 }
 
+func TestAllBuiltinThemesLoad(t *testing.T) {
+	for _, name := range BuiltinNames() {
+		cfg := &config.Config{ThemeName: name}
+		th, err := Resolve(cfg)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if th.Palette.Bg == "" || th.Palette.Fg == "" || th.Palette.Accent == "" {
+			t.Errorf("%s: palette incomplete %+v", name, th.Palette)
+		}
+		if th.Markdown.HeadingH1 == "" || th.Markdown.HeadingH6 == "" {
+			t.Errorf("%s: heading levels missing %+v", name, th.Markdown)
+		}
+		if th.Status.Done == "" || th.Status.Blocked == "" {
+			t.Errorf("%s: status colors missing %+v", name, th.Status)
+		}
+	}
+}
+
 func TestResolveDefaultIsDracula(t *testing.T) {
 	cfg := &config.Config{}
 	th, err := Resolve(cfg)
