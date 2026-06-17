@@ -92,6 +92,7 @@ func New(tree *store.Tree, th *theme.Theme, cfg *config.Config, reg *action.Regi
 		Cfg:         cfg,
 		Keys:        keys.Default(),
 		Current:     tree.Root,
+		ShowDone:    true, // visible by default; Z hides them
 		Sidebar:     sidebar.Model{Theme: th},
 		Details:     details.Model{Theme: th},
 		Breadcrumb:  breadcrumb.Model{Theme: th},
@@ -776,7 +777,7 @@ func (m *Model) helpOverlay() string {
 		row("K / J", "move up / down"),
 		row("m", "move to another parent"),
 		row("x / space", "cycle status"),
-		row("Z", "toggle show-done"),
+		row("Z", "toggle hide-done (default: show, strikethrough)"),
 		row("dd", "soft delete"),
 		row("D", "hard delete"),
 		"",
