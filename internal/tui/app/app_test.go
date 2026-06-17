@@ -117,6 +117,33 @@ func TestGChordQuickNew(t *testing.T) {
 	}
 }
 
+func TestStatusBandSort(t *testing.T) {
+	dir := t.TempDir()
+	tree, _ := store.Load(dir)
+	tree.Create(tree.Root, "Todo Task")
+	doing, _ := tree.Create(tree.Root, "Doing Task")
+	tree.SetStatus(doing, model.StatusDoing)
+	done, _ := tree.Create(tree.Root, "Done Task")
+	tree.SetStatus(done, model.StatusDone)
+	blocked, _ := tree.Create(tree.Root, "Blocked Task")
+	tree.SetStatus(blocked, model.StatusBlocked)
+
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := newModel(tree, th, &config.Config{}).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	visible := m.visibleSiblings()
+	want := []string{"doing-task", "blocked-task", "todo-task", "done-task"}
+	if len(visible) != len(want) {
+		t.Fatalf("got %d siblings, want %d", len(visible), len(want))
+	}
+	for i, w := range want {
+		if visible[i].Slug != w {
+			t.Errorf("position %d: got %q, want %q", i, visible[i].Slug, w)
+		}
+	}
+}
+
 func TestHelpToggle(t *testing.T) {
 	tree, th, cfg := setup(t)
 	m := newModel(tree, th, cfg).(*Model)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -128,7 +129,39 @@ func (m *Model) visibleSiblings() []*model.Node {
 		}
 		sibs = filtered
 	}
+	// Stable-sort by status priority so active work bubbles up: doing first,
+	// then blocked, then todo, then effectively-done at the bottom. Manual
+	// prefix order is preserved within each band by the stable sort.
+	if len(sibs) > 1 {
+		sorted := make([]*model.Node, len(sibs))
+		copy(sorted, sibs)
+		sort.SliceStable(sorted, func(i, j int) bool {
+			return statusBand(sorted[i]) < statusBand(sorted[j])
+		})
+		sibs = sorted
+	}
 	return sibs
+}
+
+// statusBand returns a sort key for the visible-tier ordering:
+//
+//	0 = doing       — active work, top
+//	1 = blocked     — needs attention
+//	2 = todo (or container that isn't fully done)
+//	3 = effectively done — bottom
+func statusBand(n *model.Node) int {
+	if n.EffectivelyDone() {
+		return 3
+	}
+	if n.EffectiveType() == model.TypeTask {
+		switch n.FM.Status {
+		case model.StatusDoing:
+			return 0
+		case model.StatusBlocked:
+			return 1
+		}
+	}
+	return 2
 }
 
 func (m *Model) selectedNode() *model.Node {
@@ -835,6 +868,7 @@ func (m *Model) helpOverlay() string {
 		hintStyle.Render("types: top-level=project (■), with-children=folder (▸), leaves=task (○ ◐ ✓ ✗)"),
 		hintStyle.Render("a container rolls up to ✓ when all its descendant tasks are done"),
 		hintStyle.Render("override with `type: project|folder|task` in frontmatter"),
+		hintStyle.Render("sort order: doing → blocked → todo → done (stable within band)"),
 		hintStyle.Render("(any key to close)"),
 	}, "\n")
 
