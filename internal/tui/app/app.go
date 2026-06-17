@@ -74,6 +74,8 @@ type Model struct {
 	ActionOut   *action.Result
 	ActionByKey map[string]action.Action
 
+	HelpMode bool
+
 	Width, Height int
 }
 
@@ -179,6 +181,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Clear transient action output on any keypress.
 		if m.ActionOut != nil {
 			m.ActionOut = nil
+			return m, nil
+		}
+
+		// Help overlay: any key closes it.
+		if m.HelpMode {
+			m.HelpMode = false
 			return m, nil
 		}
 
@@ -408,11 +416,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.Keys.SearchGlobal):
 			if m.PromptMode == promptNone {
 				m.PromptMode = promptSearchGlobal
-				m.Prompt.SetLabel("?")
+				m.Prompt.SetLabel("find:")
 				m.Prompt.Reset()
 				m.Prompt.Focus()
 				return m, nil
 			}
+		case key.Matches(msg, m.Keys.Help):
+			m.HelpMode = true
+			return m, nil
 		}
 	}
 	return m, nil
@@ -531,6 +542,14 @@ func externalEditorCmd(path string) *exec.Cmd {
 }
 
 func (m *Model) View() string {
+	if m.HelpMode {
+		overlay := m.helpOverlay()
+		if m.Width > 0 && m.Height > 0 {
+			return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, overlay)
+		}
+		return overlay
+	}
+
 	head := m.Breadcrumb.View(m.Current)
 	rawSide := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone)
 	det := m.Details.View(m.selectedNode())
@@ -548,28 +567,123 @@ func (m *Model) View() string {
 		Render(rawSide)
 	detPadded := lipgloss.NewStyle().PaddingLeft(1).Render(det)
 	pane := lipgloss.JoinHorizontal(lipgloss.Top, side, detPadded)
-	if m.ConfirmMode {
+
+	var bottom string
+	switch {
+	case m.ConfirmMode:
 		confirmMsg := "soft-delete?"
 		if m.ConfirmHard {
 			confirmMsg = "HARD DELETE? (cannot be undone)"
 		}
-		bar := lipgloss.NewStyle().
+		bottom = lipgloss.NewStyle().
 			Foreground(m.Theme.Status.Blocked).
 			Bold(true).
 			Render(confirmMsg + " [y/N]")
-		return head + "\n" + pane + "\n" + bar
-	}
-	if m.PromptMode != promptNone {
-		return head + "\n" + pane + "\n" + m.Prompt.View()
-	}
-	if m.PaletteMode {
-		return head + "\n" + pane + "\n" + m.Palette.View()
-	}
-	if m.ActionOut != nil {
+	case m.PromptMode != promptNone:
+		bottom = m.Prompt.View()
+	case m.PaletteMode:
+		bottom = m.Palette.View()
+	case m.ActionOut != nil:
 		out := fmt.Sprintf("exit=%d\n%s\n%s",
 			m.ActionOut.ExitCode, m.ActionOut.Stdout, m.ActionOut.Stderr)
-		return head + "\n" + pane + "\n" +
-			lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim).Render(out)
+		bottom = lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim).Render(out)
 	}
-	return head + "\n" + pane
+
+	hint := m.hintBar()
+	parts := []string{head, pane}
+	if bottom != "" {
+		parts = append(parts, bottom)
+	}
+	if hint != "" {
+		parts = append(parts, hint)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (m *Model) hintBar() string {
+	th := m.Theme
+	sep := lipgloss.NewStyle().Foreground(th.Palette.Dim).Render(" · ")
+	keyStyle := lipgloss.NewStyle().Foreground(th.Palette.Accent).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(th.Palette.Dim)
+	item := func(k, d string) string { return keyStyle.Render(k) + " " + descStyle.Render(d) }
+
+	var items []string
+	switch {
+	case m.ConfirmMode:
+		items = []string{item("y", "confirm"), item("n/esc", "cancel")}
+	case m.PaletteMode:
+		items = []string{item("↑↓", "navigate"), item("enter", "run"), item("esc", "close")}
+	case m.PromptMode != promptNone:
+		items = []string{item("enter", "accept"), item("esc", "cancel")}
+	case m.GlobalMode:
+		items = []string{item("j/k", "navigate"), item("enter", "jump"), item("esc", "clear")}
+	case m.LocalQuery != "":
+		items = []string{item("esc", "clear filter"), item("/", "edit query")}
+	default:
+		items = []string{
+			item("l", "drill in"),
+			item("n", "new"),
+			item("e", "edit"),
+			item("/", "search"),
+			item(":", "actions"),
+			item("?", "help"),
+			item("q", "quit"),
+		}
+	}
+	return strings.Join(items, sep)
+}
+
+func (m *Model) helpOverlay() string {
+	th := m.Theme
+	title := lipgloss.NewStyle().Foreground(th.Palette.Accent).Bold(true).Render("cascade — keybindings")
+	section := lipgloss.NewStyle().Foreground(th.Palette.Accent).Bold(true).Underline(true)
+	keyStyle := lipgloss.NewStyle().Foreground(th.Palette.Accent).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(th.Palette.Fg)
+	hintStyle := lipgloss.NewStyle().Foreground(th.Palette.Dim).Italic(true)
+
+	row := func(k, d string) string {
+		paddedKey := lipgloss.NewStyle().Width(16).Render(keyStyle.Render(k))
+		return "  " + paddedKey + descStyle.Render(d)
+	}
+
+	body := strings.Join([]string{
+		title,
+		"",
+		section.Render("NAVIGATION"),
+		row("j / k / ↑ ↓", "move cursor"),
+		row("l / enter", "drill into selected"),
+		row("h", "go back up"),
+		row("gg / G", "top / bottom"),
+		row("R", "refresh from disk"),
+		"",
+		section.Render("CAPTURE & EDIT"),
+		row("n", "new task at this tier"),
+		row("gn", "quick-capture to inbox"),
+		row("r", "rename selected"),
+		row("e", "open in $EDITOR"),
+		"",
+		section.Render("MANIPULATION"),
+		row("K / J", "move up / down"),
+		row("m", "move to another parent"),
+		row("x / space", "cycle status"),
+		row("Z", "toggle show-done"),
+		row("dd", "soft delete"),
+		row("D", "hard delete"),
+		"",
+		section.Render("SEARCH & COMMANDS"),
+		row("/", "filter current tier"),
+		row("ctrl+f", "global fuzzy search"),
+		row(":", "command palette"),
+		row("?", "this help"),
+		row("q / ctrl+c", "quit"),
+		"",
+		hintStyle.Render("tip: drill in with l, then n adds a child at that tier"),
+		hintStyle.Render("(any key to close)"),
+	}, "\n")
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(th.Palette.Border).
+		Padding(1, 3).
+		Render(body)
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +73,37 @@ func TestToggleShowDone(t *testing.T) {
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Z'}})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+}
+
+func TestHelpToggle(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	// Press '?' → HelpMode on.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if !m.HelpMode {
+		t.Fatal("? should open HelpMode")
+	}
+	if !strings.Contains(m.View(), "cascade — keybindings") {
+		t.Errorf("help overlay missing title")
+	}
+	// Any key closes it.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if m.HelpMode {
+		t.Error("any key should close HelpMode")
+	}
+}
+
+func TestHintBarDefault(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	// Send a window-size msg so dimensions exist.
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	out := m.View()
+	for _, want := range []string{"n", "new", "drill in", "help", "actions"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("hint bar missing %q in default view", want)
+		}
+	}
 }
 
 func TestStatusCycle(t *testing.T) {

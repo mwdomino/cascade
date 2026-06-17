@@ -10,6 +10,7 @@ type Map struct {
 	MoveUp, MoveDown, MoveTo           key.Binding
 	SoftDelete, HardDelete             key.Binding
 	SearchLocal, SearchGlobal, Palette key.Binding
+	Help                               key.Binding
 }
 
 func Default() Map {
@@ -34,7 +35,8 @@ func Default() Map {
 		SoftDelete:   key.NewBinding(key.WithKeys("d", "d")),
 		HardDelete:   key.NewBinding(key.WithKeys("D")),
 		SearchLocal:  key.NewBinding(key.WithKeys("/")),
-		SearchGlobal: key.NewBinding(key.WithKeys("?")),
+		SearchGlobal: key.NewBinding(key.WithKeys("ctrl+f")),
 		Palette:      key.NewBinding(key.WithKeys(":")),
+		Help:         key.NewBinding(key.WithKeys("?")),
 	}
 }
