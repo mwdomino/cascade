@@ -17,6 +17,14 @@ type Model struct {
 	YOffset         int
 	LabelCheckboxes bool // when true, body is rendered with [1]…[N] labels for the toggle overlay
 	lastPath        string
+
+	// Glamour renderer + memoization. The renderer parses style configs and
+	// compiles regexes on construction; reusing it across frames is a real
+	// win since View runs on every keystroke.
+	renderer     *glamour.TermRenderer
+	rendererW    int
+	cachedBody   string
+	cachedOutput string
 }
 
 func (m *Model) ScrollDown(lines int) {
@@ -68,13 +76,27 @@ func (m *Model) View(n *model.Node) string {
 			m.Theme.Palette.Fg,
 		)
 	} else if rendered != "" {
-		r, err := glamour.NewTermRenderer(
-			glamour.WithStyles(m.Theme.GlamourStyle()),
-			glamour.WithWordWrap(width),
-		)
-		if err == nil {
-			if out, rerr := r.Render(n.Body); rerr == nil {
+		// Rebuild the renderer only when the width changes; cache the rendered
+		// output by body content so unchanged bodies reuse the previous render.
+		if m.renderer == nil || m.rendererW != width {
+			r, err := glamour.NewTermRenderer(
+				glamour.WithStyles(m.Theme.GlamourStyle()),
+				glamour.WithWordWrap(width),
+			)
+			if err == nil {
+				m.renderer = r
+				m.rendererW = width
+				m.cachedBody = ""
+				m.cachedOutput = ""
+			}
+		}
+		if m.renderer != nil {
+			if m.cachedOutput != "" && m.cachedBody == n.Body {
+				rendered = m.cachedOutput
+			} else if out, rerr := m.renderer.Render(n.Body); rerr == nil {
 				rendered = strings.TrimRight(out, "\n")
+				m.cachedBody = n.Body
+				m.cachedOutput = rendered
 			}
 		}
 	}

@@ -64,6 +64,67 @@ func TestScrollResetsOnSelectionChange(t *testing.T) {
 	}
 }
 
+func TestRendererReusedAcrossFrames(t *testing.T) {
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := Model{Theme: th, Width: 80, Height: 40}
+	n := &model.Node{FM: model.Frontmatter{Title: "Cached"}, Body: "# hello\n\nworld"}
+
+	_ = m.View(n)
+	r1 := m.renderer
+	o1 := m.cachedOutput
+	if r1 == nil || o1 == "" {
+		t.Fatal("first View should populate renderer + cached output")
+	}
+
+	_ = m.View(n)
+	if m.renderer != r1 {
+		t.Errorf("renderer should be reused when width/theme unchanged")
+	}
+	if m.cachedOutput != o1 {
+		t.Errorf("cached output should be reused for identical body")
+	}
+
+	// Changing the body invalidates the output cache but not the renderer.
+	n.Body = "# different\n\ncontent"
+	_ = m.View(n)
+	if m.renderer != r1 {
+		t.Errorf("renderer should still be reused after body change")
+	}
+	if m.cachedOutput == o1 {
+		t.Errorf("output cache should refresh when body changes")
+	}
+
+	// Changing the width invalidates the renderer.
+	m.Width = 60
+	_ = m.View(n)
+	if m.renderer == r1 {
+		t.Errorf("renderer should be rebuilt when width changes")
+	}
+}
+
+func BenchmarkViewCached(b *testing.B) {
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := Model{Theme: th, Width: 80, Height: 40}
+	n := &model.Node{FM: model.Frontmatter{Title: "Big"}, Body: strings.Repeat(
+		"# heading\n\nparagraph with **bold** and *italic* and `code`.\n\n", 30)}
+	_ = m.View(n) // warm up
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = m.View(n)
+	}
+}
+
+func BenchmarkViewUncached(b *testing.B) {
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	n := &model.Node{FM: model.Frontmatter{Title: "Big"}, Body: strings.Repeat(
+		"# heading\n\nparagraph with **bold** and *italic* and `code`.\n\n", 30)}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		m := Model{Theme: th, Width: 80, Height: 40} // fresh model = no cache
+		_ = m.View(n)
+	}
+}
+
 func TestSubtasksBlockSynthesized(t *testing.T) {
 	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
 	parent := &model.Node{FM: model.Frontmatter{Title: "Parent"}, Body: "Hello\n"}
