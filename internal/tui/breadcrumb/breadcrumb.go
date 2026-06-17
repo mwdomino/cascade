@@ -17,9 +17,17 @@ func (m Model) View(node *model.Node) string {
 	for cur := node; cur != nil && !cur.IsRoot(); cur = cur.Parent {
 		parts = append([]string{cur.Title()}, parts...)
 	}
+	app := lipgloss.NewStyle().
+		Foreground(m.Theme.Palette.Dim).
+		Bold(true).
+		Render("cascade")
 	if len(parts) == 0 {
-		parts = []string{"~"}
+		return app
 	}
-	style := lipgloss.NewStyle().Foreground(m.Theme.Palette.Accent).Bold(true)
-	return style.Render(strings.Join(parts, " › "))
+	sep := lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim).Render(" › ")
+	path := lipgloss.NewStyle().
+		Foreground(m.Theme.Palette.Accent).
+		Bold(true).
+		Render(strings.Join(parts, " › "))
+	return app + sep + path
 }
