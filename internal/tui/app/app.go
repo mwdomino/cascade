@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -37,7 +38,14 @@ const (
 	promptSearchGlobal
 )
 
-type editorClosedMsg struct{}
+// editorClosedMsg fires after $EDITOR returns. NodePath/TempPath/FM carry
+// the body-merge context so the message handler can write the edited body
+// back through WriteIndex (which re-attaches the original frontmatter).
+type editorClosedMsg struct {
+	NodePath string
+	TempPath string
+	FM       model.Frontmatter
+}
 
 type actionDoneMsg struct {
 	Name   string
@@ -298,6 +306,17 @@ func (m *Model) restoreNav(savedCurrent, savedSelected string) {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case editorClosedMsg:
+		if msg.TempPath != "" {
+			defer os.Remove(msg.TempPath)
+			if data, rerr := os.ReadFile(msg.TempPath); rerr != nil {
+				m.ActionOut = &action.Result{Stderr: rerr.Error(), ExitCode: 1}
+			} else {
+				indexPath := filepath.Join(msg.NodePath, "index.md")
+				if werr := store.WriteIndex(indexPath, msg.FM, string(data)); werr != nil {
+					m.ActionOut = &action.Result{Stderr: werr.Error(), ExitCode: 1}
+				}
+			}
+		}
 		savedCurrent := m.Current.Path
 		savedSelected := ""
 		if sel := m.selectedNode(); sel != nil {
@@ -580,9 +599,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case key.Matches(msg, m.Keys.Edit):
 			if n := m.selectedNode(); n != nil {
-				target := filepath.Join(n.Path, "index.md")
-				return m, tea.ExecProcess(externalEditorCmd(target), func(err error) tea.Msg {
-					return editorClosedMsg{}
+				// Stage just the body in a temp file so $EDITOR shows the prose
+				// without frontmatter noise. On close, the body is merged back
+				// in via WriteIndex which re-attaches the original metadata.
+				tmp, err := os.CreateTemp("", "cascade-"+n.Slug+"-*.md")
+				if err != nil {
+					m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
+					return m, nil
+				}
+				if _, werr := tmp.WriteString(n.Body); werr != nil {
+					m.ActionOut = &action.Result{Stderr: werr.Error(), ExitCode: 1}
+					_ = tmp.Close()
+					_ = os.Remove(tmp.Name())
+					return m, nil
+				}
+				_ = tmp.Close()
+				closed := editorClosedMsg{
+					NodePath: n.Path,
+					TempPath: tmp.Name(),
+					FM:       n.FM,
+				}
+				return m, tea.ExecProcess(externalEditorCmd(tmp.Name()), func(err error) tea.Msg {
+					return closed
 				})
 			}
 		case key.Matches(msg, m.Keys.SearchLocal):
@@ -1003,7 +1041,7 @@ func (m *Model) helpOverlay() string {
 		row("n", "new task at this tier"),
 		row("gn", "quick-capture to inbox"),
 		row("r", "rename selected"),
-		row("e", "open in $EDITOR"),
+		row("e", "open body in $EDITOR (frontmatter hidden, merged on save)"),
 		row("t", "toggle checkboxes in body ([1]…[9] overlay)"),
 		"",
 		section.Render("MANIPULATION"),

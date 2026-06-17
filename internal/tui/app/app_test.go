@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -114,6 +115,53 @@ func TestGChordQuickNew(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	if m.PromptMode != promptQuickNew {
 		t.Errorf("gn should enter promptQuickNew; got %d", m.PromptMode)
+	}
+}
+
+func TestEditorMergesBodyPreservesFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	tree, _ := store.Load(dir)
+	n, _ := tree.Create(tree.Root, "Editable")
+	indexPath := filepath.Join(n.Path, "index.md")
+	// Seed disk with an extra frontmatter key + a tag the test will assert
+	// survive the merge.
+	n.FM.Tags = []string{"keep"}
+	n.FM.Extra = map[string]any{"github_repo": "foo/bar"}
+	n.Body = "original body"
+	if err := store.WriteIndex(indexPath, n.FM, n.Body); err != nil {
+		t.Fatal(err)
+	}
+
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := newModel(tree, th, &config.Config{}).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Simulate what an editor would do: write a new body to a temp file
+	// and send the editorClosedMsg.
+	tmp, err := os.CreateTemp("", "cascade-test-*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp.WriteString("brand new body only")
+	tmp.Close()
+
+	m.Update(editorClosedMsg{NodePath: n.Path, TempPath: tmp.Name(), FM: n.FM})
+
+	gotFM, gotBody, err := store.ReadIndex(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(gotBody) != "brand new body only" {
+		t.Errorf("body not updated: %q", gotBody)
+	}
+	if len(gotFM.Tags) != 1 || gotFM.Tags[0] != "keep" {
+		t.Errorf("tags not preserved: %v", gotFM.Tags)
+	}
+	if gotFM.Extra["github_repo"] != "foo/bar" {
+		t.Errorf("extra frontmatter not preserved: %v", gotFM.Extra)
+	}
+	if _, err := os.Stat(tmp.Name()); !os.IsNotExist(err) {
+		t.Errorf("temp file should be removed; stat err=%v", err)
 	}
 }
 
