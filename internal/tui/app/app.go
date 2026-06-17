@@ -528,6 +528,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.Keys.Help):
 			m.HelpMode = true
 			return m, nil
+		case key.Matches(msg, m.Keys.ScrollDown):
+			step := m.Details.Height / 2
+			if step < 1 {
+				step = 1
+			}
+			m.Details.ScrollDown(step)
+		case key.Matches(msg, m.Keys.ScrollUp):
+			step := m.Details.Height / 2
+			if step < 1 {
+				step = 1
+			}
+			m.Details.ScrollUp(step)
 		}
 	}
 	return m, nil
@@ -795,6 +807,8 @@ func (m *Model) helpOverlay() string {
 		row("h", "go back up"),
 		row("gg / G", "top / bottom (gg jumps to `..` if shown)"),
 		row("R", "refresh from disk"),
+		row("ctrl+d / pgdn", "scroll details down"),
+		row("ctrl+u / pgup", "scroll details up"),
 		"",
 		section.Render("CAPTURE & EDIT"),
 		row("n", "new task at this tier"),

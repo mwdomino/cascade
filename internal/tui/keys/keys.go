@@ -11,6 +11,7 @@ type Map struct {
 	SoftDelete, HardDelete             key.Binding
 	SearchLocal, SearchGlobal, Palette key.Binding
 	Help                               key.Binding
+	ScrollDown, ScrollUp               key.Binding
 }
 
 func Default() Map {
@@ -38,5 +39,7 @@ func Default() Map {
 		SearchGlobal: key.NewBinding(key.WithKeys("ctrl+f")),
 		Palette:      key.NewBinding(key.WithKeys(":")),
 		Help:         key.NewBinding(key.WithKeys("?")),
+		ScrollDown:   key.NewBinding(key.WithKeys("ctrl+d", "pgdown")),
+		ScrollUp:     key.NewBinding(key.WithKeys("ctrl+u", "pgup")),
 	}
 }

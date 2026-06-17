@@ -11,15 +11,37 @@ import (
 )
 
 type Model struct {
-	Theme  *theme.Theme
-	Width  int
-	Height int
+	Theme    *theme.Theme
+	Width    int
+	Height   int
+	YOffset  int
+	lastPath string
 }
 
-func (m Model) View(n *model.Node) string {
+func (m *Model) ScrollDown(lines int) {
+	m.YOffset += lines
+	// Final clamp happens in View where we know the content height.
+}
+
+func (m *Model) ScrollUp(lines int) {
+	m.YOffset -= lines
+	if m.YOffset < 0 {
+		m.YOffset = 0
+	}
+}
+
+func (m *Model) ResetScroll() { m.YOffset = 0 }
+
+func (m *Model) View(n *model.Node) string {
 	if n == nil {
 		return lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim).Render("(no selection)")
 	}
+	// Reset scroll when the selection changes.
+	if n.Path != m.lastPath {
+		m.YOffset = 0
+		m.lastPath = n.Path
+	}
+
 	width := m.Width
 	if width <= 0 {
 		width = 80
@@ -35,7 +57,6 @@ func (m Model) View(n *model.Node) string {
 		Foreground(m.Theme.Palette.Border).
 		Render(strings.Repeat("─", width))
 
-	// Render the body via glamour. Containers/empty leaves may have no body.
 	rendered := strings.TrimRight(n.Body, "\n")
 	if rendered != "" {
 		r, err := glamour.NewTermRenderer(
@@ -49,22 +70,68 @@ func (m Model) View(n *model.Node) string {
 		}
 	}
 
-	// Build the synthesized subtasks block AFTER glamour, so lipgloss-styled
-	// glyphs (which contain raw ANSI escapes) don't get fed through markdown
-	// rendering and mangled into literal escape sequences.
 	subtasks := m.synthesizeSubtasks(n)
 
-	parts := []string{title, rule}
+	// Compose the scrollable portion: body + Subtasks block. Title and rule
+	// stay pinned at the top.
+	var scroll strings.Builder
 	if rendered != "" {
-		parts = append(parts, rendered)
+		scroll.WriteString(rendered)
 	}
 	if subtasks != "" {
-		parts = append(parts, subtasks)
+		if scroll.Len() > 0 {
+			scroll.WriteString("\n")
+		}
+		scroll.WriteString(subtasks)
 	}
+	scrollContent := scroll.String()
+	scrollLines := strings.Split(scrollContent, "\n")
+	if scrollContent == "" {
+		scrollLines = nil
+	}
+
+	headerH := lipgloss.Height(title) + 1 /* rule */
+	availH := m.Height - headerH
+	if availH < 1 {
+		availH = 1
+	}
+
+	maxOffset := len(scrollLines) - availH
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if m.YOffset > maxOffset {
+		m.YOffset = maxOffset
+	}
+
+	visible := scrollLines
+	if m.YOffset < len(visible) {
+		visible = visible[m.YOffset:]
+	} else {
+		visible = nil
+	}
+	if len(visible) > availH {
+		visible = visible[:availH]
+	}
+
+	parts := []string{title, rule}
+	if len(visible) > 0 {
+		parts = append(parts, strings.Join(visible, "\n"))
+	}
+
+	// Show a small "more below" indicator when there's hidden content.
+	if len(scrollLines) > 0 && m.YOffset+availH < len(scrollLines) {
+		indicator := lipgloss.NewStyle().
+			Foreground(m.Theme.Palette.Dim).
+			Italic(true).
+			Render("↓ more (ctrl+d / pgdn)")
+		parts = append(parts, indicator)
+	}
+
 	return strings.Join(parts, "\n")
 }
 
-func (m Model) synthesizeSubtasks(n *model.Node) string {
+func (m *Model) synthesizeSubtasks(n *model.Node) string {
 	if len(n.Children) == 0 {
 		return ""
 	}
@@ -79,7 +146,6 @@ func (m Model) synthesizeSubtasks(n *model.Node) string {
 		Strikethrough(true)
 
 	var b strings.Builder
-	b.WriteString("\n")
 	b.WriteString(heading)
 	b.WriteString("\n\n")
 	for _, c := range n.Children {
