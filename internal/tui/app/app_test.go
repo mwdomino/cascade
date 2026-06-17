@@ -117,6 +117,47 @@ func TestGChordQuickNew(t *testing.T) {
 	}
 }
 
+func TestCheckboxToggleFlow(t *testing.T) {
+	dir := t.TempDir()
+	tree, _ := store.Load(dir)
+	n, _ := tree.Create(tree.Root, "Has Boxes")
+	body := "intro\n- [ ] write tests\n- [ ] ship it"
+	n.Body = body
+	// Persist so the on-disk file matches in-memory state.
+	indexPath := filepath.Join(n.Path, "index.md")
+	if err := store.WriteIndex(indexPath, n.FM, body); err != nil {
+		t.Fatal(err)
+	}
+
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := newModel(tree, th, &config.Config{}).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Enter toggle mode.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	if !m.ToggleMode {
+		t.Fatal("t should enter ToggleMode")
+	}
+	// Press 2 → toggle the second checkbox.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	if m.ToggleMode {
+		t.Error("ToggleMode should auto-close after a toggle")
+	}
+
+	// Verify the on-disk body.
+	fm, gotBody, err := store.ReadIndex(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = fm
+	if !strings.Contains(gotBody, "- [x] ship it") {
+		t.Errorf("expected second box ticked on disk:\n%s", gotBody)
+	}
+	if !strings.Contains(gotBody, "- [ ] write tests") {
+		t.Errorf("first box should still be unticked:\n%s", gotBody)
+	}
+}
+
 func TestMovePickerOpensAndMoves(t *testing.T) {
 	dir := t.TempDir()
 	tree, _ := store.Load(dir)

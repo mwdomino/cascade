@@ -98,6 +98,9 @@ type Model struct {
 	MovePickerMode bool
 	MovePicker     palette.Model
 
+	// Checkbox toggle overlay state
+	ToggleMode bool
+
 	Width, Height int
 }
 
@@ -329,6 +332,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Help overlay: any key closes it.
 		if m.HelpMode {
 			m.HelpMode = false
+			return m, nil
+		}
+
+		// Checkbox toggle overlay: digit toggles the labeled checkbox; any
+		// other key (incl. Esc) closes the overlay.
+		if m.ToggleMode {
+			if d, ok := digitPressed(msg.String()); ok {
+				m.handleCheckboxToggle(d)
+			}
+			m.ToggleMode = false
+			m.Details.LabelCheckboxes = false
 			return m, nil
 		}
 
@@ -590,6 +604,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.Keys.Help):
 			m.HelpMode = true
 			return m, nil
+		case key.Matches(msg, m.Keys.ToggleCheckbox):
+			if n := m.selectedNode(); n != nil && details.CountCheckboxes(n.Body) > 0 {
+				m.ToggleMode = true
+				m.Details.LabelCheckboxes = true
+			}
+			return m, nil
 		case key.Matches(msg, m.Keys.ScrollDown):
 			step := m.Details.Height / 2
 			if step < 1 {
@@ -784,6 +804,37 @@ func (m *Model) View() string {
 	return strings.Join(parts, "\n")
 }
 
+// digitPressed parses a single-digit keypress ("1".."9").
+func digitPressed(s string) (int, bool) {
+	if len(s) != 1 {
+		return 0, false
+	}
+	c := s[0]
+	if c < '1' || c > '9' {
+		return 0, false
+	}
+	return int(c - '0'), true
+}
+
+// handleCheckboxToggle flips checkbox `label` (1-9) in the selected node's
+// body and writes the result back to disk. Errors surface via ActionOut.
+func (m *Model) handleCheckboxToggle(label int) {
+	n := m.selectedNode()
+	if n == nil {
+		return
+	}
+	newBody, ok := details.ToggleCheckbox(n.Body, label)
+	if !ok {
+		return
+	}
+	indexPath := filepath.Join(n.Path, "index.md")
+	if err := store.WriteIndex(indexPath, n.FM, newBody); err != nil {
+		m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
+		return
+	}
+	n.Body = newBody
+}
+
 // openMovePicker populates and activates a centered fuzzy picker of all
 // possible move targets (every node except self and descendants, plus the
 // root as "(top level)").
@@ -901,6 +952,8 @@ func (m *Model) hintBar() string {
 		items = []string{item("↑↓", "navigate"), item("enter", "run"), item("esc", "close")}
 	case m.MovePickerMode:
 		items = []string{item("type", "filter"), item("↑↓", "navigate"), item("enter", "move"), item("esc", "cancel")}
+	case m.ToggleMode:
+		items = []string{item("1-9", "toggle checkbox"), item("esc", "cancel")}
 	case m.PromptMode != promptNone:
 		items = []string{item("enter", "accept"), item("esc", "cancel")}
 	case m.GlobalMode:
@@ -951,6 +1004,7 @@ func (m *Model) helpOverlay() string {
 		row("gn", "quick-capture to inbox"),
 		row("r", "rename selected"),
 		row("e", "open in $EDITOR"),
+		row("t", "toggle checkboxes in body ([1]…[9] overlay)"),
 		"",
 		section.Render("MANIPULATION"),
 		row("K / J", "move up / down"),

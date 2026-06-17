@@ -11,11 +11,12 @@ import (
 )
 
 type Model struct {
-	Theme    *theme.Theme
-	Width    int
-	Height   int
-	YOffset  int
-	lastPath string
+	Theme           *theme.Theme
+	Width           int
+	Height          int
+	YOffset         int
+	LabelCheckboxes bool // when true, body is rendered with [1]…[N] labels for the toggle overlay
+	lastPath        string
 }
 
 func (m *Model) ScrollDown(lines int) {
@@ -58,7 +59,15 @@ func (m *Model) View(n *model.Node) string {
 		Render(strings.Repeat("─", width))
 
 	rendered := strings.TrimRight(n.Body, "\n")
-	if rendered != "" {
+	if m.LabelCheckboxes {
+		// Bypass glamour so the [1]…[N] labels and direct ANSI styling survive.
+		rendered = renderLabeledBody(n.Body,
+			m.Theme.Palette.Accent,
+			m.Theme.Status.Done,
+			m.Theme.Status.Todo,
+			m.Theme.Palette.Fg,
+		)
+	} else if rendered != "" {
 		r, err := glamour.NewTermRenderer(
 			glamour.WithStyles(m.Theme.GlamourStyle()),
 			glamour.WithWordWrap(width),

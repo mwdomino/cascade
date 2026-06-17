@@ -12,6 +12,7 @@ type Map struct {
 	SearchLocal, SearchGlobal, Palette key.Binding
 	Help                               key.Binding
 	ScrollDown, ScrollUp               key.Binding
+	ToggleCheckbox                     key.Binding
 }
 
 func Default() Map {
@@ -41,5 +42,6 @@ func Default() Map {
 		Help:         key.NewBinding(key.WithKeys("?")),
 		ScrollDown:   key.NewBinding(key.WithKeys("ctrl+d", "pgdown")),
 		ScrollUp:     key.NewBinding(key.WithKeys("ctrl+u", "pgup")),
+		ToggleCheckbox: key.NewBinding(key.WithKeys("t")),
 	}
 }
