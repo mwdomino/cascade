@@ -616,23 +616,10 @@ func (m *Model) View() string {
 	}
 
 	head := m.Breadcrumb.View(m.Current)
-	rawSide := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone, m.hasDotDot())
-	det := m.Details.View(m.selectedNode())
+	hint := m.hintBar()
 
-	sideHeight := m.Sidebar.Height
-	if sideHeight <= 0 {
-		sideHeight = lipgloss.Height(det)
-	}
-	side := lipgloss.NewStyle().
-		Width(m.Sidebar.Width).
-		Height(sideHeight).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderRight(true).
-		BorderForeground(m.Theme.Palette.Border).
-		Render(rawSide)
-	detPadded := lipgloss.NewStyle().PaddingLeft(1).Render(det)
-	pane := lipgloss.JoinHorizontal(lipgloss.Top, side, detPadded)
-
+	// Build bottom slot (everything except palette, which renders as a
+	// centered modal over the pane instead of growing the layout).
 	var bottom string
 	switch {
 	case m.ConfirmMode:
@@ -646,15 +633,42 @@ func (m *Model) View() string {
 			Render(confirmMsg + " [y/N]")
 	case m.PromptMode != promptNone:
 		bottom = m.Prompt.View()
-	case m.PaletteMode:
-		bottom = m.Palette.View()
 	case m.ActionOut != nil:
 		out := fmt.Sprintf("exit=%d\n%s\n%s",
 			m.ActionOut.ExitCode, m.ActionOut.Stdout, m.ActionOut.Stderr)
 		bottom = lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim).Render(out)
 	}
 
-	hint := m.hintBar()
+	// Compute available pane height so head + pane + bottom + hint == m.Height.
+	paneH := m.Height - lipgloss.Height(head) - lipgloss.Height(hint)
+	if bottom != "" {
+		paneH -= lipgloss.Height(bottom)
+	}
+	if m.Height <= 0 || paneH < 3 {
+		paneH = 3
+	}
+
+	rawSide := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone, m.hasDotDot())
+	det := m.Details.View(m.selectedNode())
+	det = clipLines(det, paneH)
+
+	side := lipgloss.NewStyle().
+		Width(m.Sidebar.Width).
+		Height(paneH).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderRight(true).
+		BorderForeground(m.Theme.Palette.Border).
+		Render(rawSide)
+	detPadded := lipgloss.NewStyle().PaddingLeft(1).Render(det)
+	pane := lipgloss.JoinHorizontal(lipgloss.Top, side, detPadded)
+
+	// Palette renders as a centered modal over the pane area, replacing
+	// the pane content but leaving head + hint visible.
+	if m.PaletteMode {
+		pane = lipgloss.Place(m.Width, paneH, lipgloss.Center, lipgloss.Center,
+			m.paletteCard())
+	}
+
 	parts := []string{head, pane}
 	if bottom != "" {
 		parts = append(parts, bottom)
@@ -663,6 +677,28 @@ func (m *Model) View() string {
 		parts = append(parts, hint)
 	}
 	return strings.Join(parts, "\n")
+}
+
+// paletteCard wraps the palette view in a rounded border so it reads as a
+// floating modal rather than a bare list.
+func (m *Model) paletteCard() string {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.Theme.Palette.Border).
+		Padding(0, 2).
+		Render(m.Palette.View())
+}
+
+// clipLines truncates s to at most n lines.
+func clipLines(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[:n], "\n")
 }
 
 func (m *Model) hintBar() string {
