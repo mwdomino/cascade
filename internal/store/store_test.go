@@ -101,3 +101,16 @@ func TestSetStatus(t *testing.T) {
 		t.Errorf("disk status %q", fm.Status)
 	}
 }
+
+func TestSoftDeletePurgesDescendants(t *testing.T) {
+	tree := newTree(t)
+	parent, _ := tree.Create(tree.Root, "parent")
+	child, _ := tree.Create(parent, "child")
+	childPath := child.Path
+	if err := tree.SoftDelete(parent); err != nil {
+		t.Fatal(err)
+	}
+	if n := tree.NodeAt(childPath); n != nil {
+		t.Errorf("child path still in byPath: %s", childPath)
+	}
+}

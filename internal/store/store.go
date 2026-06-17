@@ -218,7 +218,14 @@ func (t *Tree) detach(n *model.Node) {
 			}
 		}
 	}
+	t.purgeByPath(n)
+}
+
+func (t *Tree) purgeByPath(n *model.Node) {
 	delete(t.byPath, n.Path)
+	for _, c := range n.Children {
+		t.purgeByPath(c)
+	}
 }
 
 func (t *Tree) Reload() error {
