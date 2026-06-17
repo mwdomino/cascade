@@ -21,6 +21,7 @@ type Model struct {
 	Keys    keys.Map
 	Current *model.Node // parent of the displayed siblings
 	Cursor  int
+	ShowDone bool
 
 	Sidebar    sidebar.Model
 	Details    details.Model
@@ -108,6 +109,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Current = m.Tree.Root
 				m.Cursor = 0
 			}
+		case key.Matches(msg, m.Keys.ToggleDone):
+			m.ShowDone = !m.ShowDone
 		}
 	}
 	return m, nil
@@ -116,7 +119,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() string {
 	border := lipgloss.NewStyle().Foreground(m.Theme.Palette.Border)
 	head := m.Breadcrumb.View(m.Current)
-	side := m.Sidebar.View(m.visibleSiblings(), m.Cursor)
+	side := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone)
 	det := m.Details.View(m.selectedNode())
 	pane := lipgloss.JoinHorizontal(lipgloss.Top, side, border.Render(" │ "), det)
 	return head + "\n" + pane

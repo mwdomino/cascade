@@ -52,3 +52,18 @@ func TestBottomOnEmpty(t *testing.T) {
 
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
 }
+
+func TestToggleShowDone(t *testing.T) {
+	tree, th, cfg := setup(t)
+	// Mark "Personal" as done
+	for _, n := range tree.Root.Children {
+		if n.Slug == "personal" {
+			tree.SetStatus(n, model.StatusDone)
+		}
+	}
+	tm := teatest.NewTestModel(t, New(tree, th, cfg),
+		teatest.WithInitialTermSize(120, 40))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Z'}})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+}
