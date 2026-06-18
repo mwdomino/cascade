@@ -77,13 +77,11 @@ func buildEnv(n *model.Node) []string {
 
 func (a Action) Run(n *model.Node) (Result, error) {
 	cmd := exec.Command("sh", "-c", a.Def.Cmd)
-	cmd.Env = append(cmd.Env, buildEnv(n)...)
-	// Inherit PATH and HOME from process env so tools like `gh` resolve.
-	for _, k := range []string{"PATH", "HOME", "USER", "SHELL", "LANG", "TERM"} {
-		if v := getenv(k); v != "" {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
-	}
+	// Inherit the controller's full environment so real-world tools
+	// (gh, kubectl, ssh-agent, etc.) find the secrets and sockets they
+	// need. CASCADE_* are appended last so they override any same-named
+	// ambient variable.
+	cmd.Env = append(globalEnv(), buildEnv(n)...)
 	if a.Def.Stdin == "body" {
 		cmd.Stdin = strings.NewReader(n.Body)
 	}
@@ -100,15 +98,6 @@ func (a Action) Run(n *model.Node) (Result, error) {
 		return res, err
 	}
 	return res, nil
-}
-
-func getenv(k string) string {
-	for _, e := range globalEnv() {
-		if strings.HasPrefix(e, k+"=") {
-			return e[len(k)+1:]
-		}
-	}
-	return ""
 }
 
 // Indirected for testability.
