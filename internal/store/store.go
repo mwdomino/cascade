@@ -238,7 +238,19 @@ func (t *Tree) SoftDelete(n *model.Node) error {
 		return err
 	}
 	ts := time.Now().UTC().Format("20060102T150405")
-	dest := filepath.Join(trashDir, fmt.Sprintf("%s-%s", ts, n.Slug))
+	base := filepath.Join(trashDir, fmt.Sprintf("%s-%s", ts, n.Slug))
+	// Collide-safe: if a sibling was already trashed within the same second
+	// with the same slug, append -1, -2, … until we find a free name.
+	dest := base
+	for i := 1; ; i++ {
+		if _, err := os.Stat(dest); os.IsNotExist(err) {
+			break
+		}
+		if i > 1000 {
+			return fmt.Errorf("trash collision: could not find a free name under %s", base)
+		}
+		dest = fmt.Sprintf("%s-%d", base, i)
+	}
 	if err := os.Rename(n.Path, dest); err != nil {
 		return err
 	}

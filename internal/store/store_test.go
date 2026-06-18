@@ -87,6 +87,23 @@ func TestSoftDelete(t *testing.T) {
 	}
 }
 
+func TestSoftDeleteSameSecondCollision(t *testing.T) {
+	tree := newTree(t)
+	a, _ := tree.Create(tree.Root, "thing")
+	if err := tree.SoftDelete(a); err != nil {
+		t.Fatal(err)
+	}
+	// Recreate and delete again — same slug, almost certainly same second.
+	b, _ := tree.Create(tree.Root, "thing")
+	if err := tree.SoftDelete(b); err != nil {
+		t.Fatalf("second SoftDelete should not collide: %v", err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(tree.TasksDir, ".trash"))
+	if len(entries) != 2 {
+		t.Errorf("expected 2 trash entries (the suffix-disambiguated pair), got %d", len(entries))
+	}
+}
+
 func TestMoveUpWithDuplicateSlugs(t *testing.T) {
 	tree := newTree(t)
 	// Create two siblings that share a slug. Tree.Create slugifies title;
