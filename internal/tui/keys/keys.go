@@ -20,7 +20,7 @@ func Default() Map {
 		Up:           key.NewBinding(key.WithKeys("k", "up")),
 		Down:         key.NewBinding(key.WithKeys("j", "down")),
 		In:           key.NewBinding(key.WithKeys("l", "right", "enter")),
-		Out:          key.NewBinding(key.WithKeys("h", "left", "backspace")),
+		Out:          key.NewBinding(key.WithKeys("h", "left", "backspace", "esc")),
 		Top:          key.NewBinding(), // dispatched by gg chord handler
 		Bottom:       key.NewBinding(key.WithKeys("G")),
 		Refresh:      key.NewBinding(key.WithKeys("R")),

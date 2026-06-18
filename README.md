@@ -59,7 +59,7 @@ Launch with `cascade` — the first time it creates `~/.cascade/` and shows an e
 | `n` again | now creates a child of that item |
 | `e` | open the selected item's `index.md` in `$EDITOR` for body editing |
 | `x` | mark the selected task done (cycles status: todo → doing → done → blocked) |
-| `h` / `backspace` | go up one tier (or hit `Enter` on the `..` row) |
+| `h` / `backspace` / `esc` | go up one tier (or hit `Enter` on the `..` row) |
 
 The "where am I" cue is the breadcrumb. If it says `cascade`, `n` creates a project. If it says `cascade › Foo`, `n` creates a child of `Foo`.
 
@@ -105,7 +105,7 @@ A container is "effectively done" when every descendant task is done. The sideba
 |---|---|
 | `j` / `k` / `↑` / `↓` | move cursor |
 | `l` / `Enter` | drill into selected (or `..` to go up) |
-| `h` / `backspace` | back one tier |
+| `h` / `backspace` / `esc` | back one tier |
 | `gg` / `G` | top / bottom |
 | `R` | reload from disk |
 

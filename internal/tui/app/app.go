@@ -1446,7 +1446,7 @@ func (m *Model) helpOverlay() string {
 		section.Render("NAVIGATION"),
 		row("j / k / ↑ ↓", "move cursor"),
 		row("l / enter", "drill into selected (or `..` to go up)"),
-		row("h / backspace", "go back up"),
+		row("h / backspace / esc", "go back up"),
 		row("gg / G", "top / bottom (gg jumps to `..` if shown)"),
 		row("R", "refresh from disk"),
 		row("ctrl+d / ctrl+j / pgdn", "scroll details down"),
