@@ -511,6 +511,31 @@ func TestThemeSwitchInPalette(t *testing.T) {
 	}
 }
 
+func TestDotDotShowsParentDetails(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Drill into "work" — `..` is now the first row.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if !m.cursorIsDotDot() {
+		t.Fatalf("setup: cursor not on `..`")
+	}
+
+	// selectedNode (used for mutations) stays nil so x / r / dd are no-ops.
+	if got := m.selectedNode(); got != nil {
+		t.Errorf("selectedNode should be nil on `..`, got %v", got)
+	}
+	// displayedNode (used for the details pane) returns the current
+	// tier's container — what `..` exits to in context.
+	got := m.displayedNode()
+	if got == nil || got.Slug != "work" {
+		t.Errorf("displayedNode should be `work`, got %v", got)
+	}
+}
+
 func TestBackspaceAscends(t *testing.T) {
 	tree, th, cfg := setup(t)
 	m := newModel(tree, th, cfg).(*Model)

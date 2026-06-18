@@ -216,6 +216,22 @@ func (m *Model) selectedNode() *model.Node {
 	return sibs[idx]
 }
 
+// displayedNode is what the details pane should render. Equivalent to
+// selectedNode for real-child rows; on the synthetic `..` row it returns
+// m.Current — the container the user is currently inside — so they see
+// what `..` exits to in context. Use this ONLY for read-only display;
+// mutations (x, r, dd, …) still go through selectedNode so `..` stays a
+// no-op for destructive ops.
+func (m *Model) displayedNode() *model.Node {
+	if m.cursorIsDotDot() {
+		if m.Current != nil && !m.Current.IsRoot() {
+			return m.Current
+		}
+		return nil
+	}
+	return m.selectedNode()
+}
+
 // hasDotDot reports whether a `..` row should appear at the top of the sidebar.
 // Suppressed in global-search results and when a local filter is active so the
 // match list isn't interrupted.
@@ -1112,7 +1128,7 @@ func (m *Model) View() string {
 	}
 
 	rawSide := m.Sidebar.View(m.visibleSiblings(), m.Cursor, m.ShowDone, m.hasDotDot())
-	det := m.Details.View(m.selectedNode())
+	det := m.Details.View(m.displayedNode())
 	det = clipLines(det, paneH)
 
 	side := lipgloss.NewStyle().
