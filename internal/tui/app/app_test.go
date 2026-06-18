@@ -349,6 +349,55 @@ func TestDrillIntoEmptyContainer(t *testing.T) {
 	}
 }
 
+func TestCursorTracksNodeThroughSort(t *testing.T) {
+	dir := t.TempDir()
+	tree, _ := store.Load(dir)
+	a, _ := tree.Create(tree.Root, "Apple")
+	b, _ := tree.Create(tree.Root, "Banana")
+	// b becomes doing; status sort moves it to the top of the visible list.
+	tree.SetStatus(b, model.StatusDoing)
+
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := newModel(tree, th, &config.Config{}).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// After the sort, position 0 should be the doing task (b).
+	if got := m.selectedNode(); got != b {
+		t.Fatalf("expected selection on Banana (doing), got %v", got)
+	}
+	// goUp/restoreNav round-trip: drill into Banana, then back. Cursor should
+	// land on Banana, not on raw-index-0 (Apple).
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if got := m.selectedNode(); got != b {
+		t.Errorf("h should restore cursor to Banana (the sorted-top entry), got %v", got)
+	}
+	_ = a
+}
+
+func TestZTogglePreservesSelection(t *testing.T) {
+	dir := t.TempDir()
+	tree, _ := store.Load(dir)
+	a, _ := tree.Create(tree.Root, "Alpha")
+	tree.SetStatus(a, model.StatusDoing)
+	b, _ := tree.Create(tree.Root, "Beta")
+
+	th, _ := theme.Resolve(&config.Config{ThemeName: "dracula"})
+	m := newModel(tree, th, &config.Config{}).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Move cursor to Beta (alpha is doing → top of band; beta is todo → below).
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if got := m.selectedNode(); got != b {
+		t.Fatalf("setup: cursor not on Beta, got %v", got)
+	}
+	// Z toggle should keep cursor on Beta even as the filter flips.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Z'}})
+	if got := m.selectedNode(); got != b {
+		t.Errorf("Z toggle should preserve selection on Beta, got %v", got)
+	}
+}
+
 func TestEnterOnDotDotAscends(t *testing.T) {
 	tree, th, cfg := setup(t)
 	// setup creates "work" (with children "ship-v1", "fix-bug") and "personal".

@@ -244,9 +244,10 @@ func (m *Model) childIndex() int {
 }
 
 // cursorAtChild returns the cursor position that points at `target` within
-// m.Current.Children, accounting for an optional `..` row.
+// the CURRENTLY-VISIBLE sibling list (sorted + filtered), with the `..` row
+// offset baked in. Falls back to "first real row" when target isn't visible.
 func (m *Model) cursorAtChild(target *model.Node) int {
-	for i, c := range m.Current.Children {
+	for i, c := range m.visibleSiblings() {
 		if c == target {
 			if m.hasDotDot() {
 				return i + 1
@@ -290,14 +291,12 @@ func (m *Model) restoreNav(savedCurrent, savedSelected string) {
 	}
 	m.Current = restored
 	if savedSelected != "" {
-		sel := m.Tree.NodeAt(savedSelected)
-		if sel != nil {
-			for i, c := range m.Current.Children {
-				if c == sel {
-					m.Cursor = i
-					return
-				}
+		if sel := m.Tree.NodeAt(savedSelected); sel != nil {
+			m.Cursor = m.cursorAtChild(sel)
+			if m.Cursor > m.cursorMax() {
+				m.Cursor = m.cursorMax()
 			}
+			return
 		}
 	}
 	m.Cursor = 0
@@ -509,9 +508,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.GlobalMatches) > 0 && m.Cursor < len(m.GlobalMatches) {
 					target := m.GlobalMatches[m.Cursor]
 					m.Current = target.Parent
-					m.Cursor = m.cursorAtChild(target)
+					// Clear global state BEFORE computing the cursor so
+					// cursorAtChild iterates the new tier's visible list,
+					// not the (about-to-be-stale) match list.
 					m.GlobalMode = false
 					m.GlobalMatches = nil
+					m.Cursor = m.cursorAtChild(target)
 				}
 				return m, nil
 			}
@@ -541,7 +543,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.restoreNav(savedCurrent, savedSelected)
 			}
 		case key.Matches(msg, m.Keys.ToggleDone):
+			// Try to keep the same node selected as the filter flips. If the
+			// previously-selected node is hidden by the new filter, fall back
+			// to the nearest valid row.
+			prev := m.selectedNode()
 			m.ShowDone = !m.ShowDone
+			switch {
+			case prev != nil:
+				m.Cursor = m.cursorAtChild(prev)
+			case m.Cursor > m.cursorMax():
+				m.Cursor = m.cursorMax()
+			}
+			if m.Cursor > m.cursorMax() {
+				m.Cursor = m.cursorMax()
+			}
+			if m.Cursor < 0 {
+				m.Cursor = 0
+			}
 		case key.Matches(msg, m.Keys.StatusCycle):
 			if n := m.selectedNode(); n != nil && !n.IsContainer() {
 				if err := m.Tree.SetStatus(n, n.FM.Status.Cycle()); err != nil {
@@ -670,8 +688,8 @@ func (m *Model) submitPrompt() tea.Cmd {
 	switch m.PromptMode {
 	case promptNew:
 		if val != "" {
-			if _, err := m.Tree.Create(m.Current, val); err == nil {
-				m.Cursor = len(m.Current.Children) - 1
+			if created, err := m.Tree.Create(m.Current, val); err == nil {
+				m.Cursor = m.cursorAtChild(created)
 			} else {
 				m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
 			}
