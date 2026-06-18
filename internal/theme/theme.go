@@ -182,7 +182,11 @@ func (t *Theme) GlamourStyle() ansi.StyleConfig {
 	}
 	if t.Palette.Fg != "" {
 		cfg.Document.Color = str(t.Palette.Fg)
-		cfg.Text.Color = str(t.Palette.Fg)
+		// Intentionally don't override Text.Color: when a Text node lives
+		// inside a styled block (heading, blockquote, …), glamour's cascade
+		// gives a non-nil child Color priority over the parent. Setting
+		// Text.Color globally would defeat per-block colors. Document.Color
+		// is enough as the baseline for unstyled paragraph text.
 	}
 
 	// Replace task glyphs with cascade's status icons in cascade's status

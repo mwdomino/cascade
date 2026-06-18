@@ -8,6 +8,29 @@ import (
 	"github.com/mwdomino/cascade/internal/config"
 )
 
+func TestRenderHeadingsHaveColor(t *testing.T) {
+	th, _ := Resolve(&config.Config{ThemeName: "dracula"})
+	body := "# Heading One\n\n## Heading Two\n\n### Heading Three\n"
+	r, err := glamour.NewTermRenderer(glamour.WithStyles(th.GlamourStyle()), glamour.WithWordWrap(60))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := r.Render(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Dracula heading_h1=#bd93f9 (rgb 189;147;249), h2=#ff79c6 (255;121;198),
+	// h3=#8be9fd (139;233;253). The SGR escape should embed those triplets.
+	for _, want := range []string{"189;147;249", "255;121;198", "139;233;253"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected color %q in rendered headings; got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "# Heading One") {
+		t.Errorf("literal '# ' prefix should have been stripped:\n%s", out)
+	}
+}
+
 // TestRenderSmokeMatchesUserExample renders the literal markdown the user
 // reported as not working and asserts the rendered output picks up the
 // expected escape sequences for italic / bold / strikethrough and shows
