@@ -408,7 +408,7 @@ func TestPaletteHasBuiltinCommands(t *testing.T) {
 		got[it.Name] = true
 	}
 	for _, want := range []string{
-		"refresh", "about", "stats", "export:tree",
+		"refresh", "quit", "about", "stats", "export:tree",
 		"goto:root", "goto:inbox", "goto:trash",
 		"toggle:done", "empty-trash", "purge-done",
 		"edit:config", "reveal:tasks_dir",

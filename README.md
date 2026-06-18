@@ -199,6 +199,7 @@ Beyond user-defined actions, the palette ships with these built-ins. None have k
 | Command | What |
 |---|---|
 | `refresh` | reload the tree from disk (same as `R`) |
+| `quit` | exit cascade (same as `q` / `ctrl+c`) |
 | `about` | show cascade version, tasks_dir, theme, node count |
 | `stats` | counts by node type and task status |
 | `export:tree` | dump the whole tree as a nested markdown checklist |

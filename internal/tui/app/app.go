@@ -801,6 +801,10 @@ func (m *Model) paletteItems() []palette.Item {
 			close()
 			return nil
 		}},
+		{Name: "quit", Hint: "exit cascade (same as q / ctrl+c)", Run: func() tea.Cmd {
+			close()
+			return tea.Quit
+		}},
 		{Name: "about", Hint: "version, tasks_dir, theme", Run: func() tea.Cmd {
 			m.ActionOut = &action.Result{Stdout: m.aboutText()}
 			close()
