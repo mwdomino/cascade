@@ -57,7 +57,7 @@ func (m Model) emptyHint() string {
 		"",
 		dim.Render("press ") + accent.Render("n") + dim.Render(" to add one"),
 		dim.Render("press ") + accent.Render(":") + dim.Render(" for the command palette"),
-		dim.Render("press ") + accent.Render("h") + dim.Render(" to go back"),
+		dim.Render("press ") + accent.Render("h") + dim.Render(" or ") + accent.Render("⌫") + dim.Render(" to go back"),
 	}
 	return strings.Join(lines, "\n")
 }

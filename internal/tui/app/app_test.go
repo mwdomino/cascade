@@ -398,6 +398,23 @@ func TestZTogglePreservesSelection(t *testing.T) {
 	}
 }
 
+func TestBackspaceAscends(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Drill into "work".
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.Current.Slug != "work" {
+		t.Fatalf("setup: expected to be inside work, got %q", m.Current.Slug)
+	}
+	// Backspace should ascend.
+	m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if m.Current != tree.Root {
+		t.Errorf("backspace should ascend to root, still in %q", m.Current.Slug)
+	}
+}
+
 func TestEnterOnDotDotAscends(t *testing.T) {
 	tree, th, cfg := setup(t)
 	// setup creates "work" (with children "ship-v1", "fix-bug") and "personal".

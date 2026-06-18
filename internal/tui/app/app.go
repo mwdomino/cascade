@@ -1022,6 +1022,7 @@ func (m *Model) hintBar() string {
 	default:
 		items = []string{
 			item("l", "drill in"),
+			item("⌫", "back"),
 			item("n", "new"),
 			item("e", "edit"),
 			item("/", "search"),
@@ -1052,7 +1053,7 @@ func (m *Model) helpOverlay() string {
 		section.Render("NAVIGATION"),
 		row("j / k / ↑ ↓", "move cursor"),
 		row("l / enter", "drill into selected (or `..` to go up)"),
-		row("h", "go back up"),
+		row("h / backspace", "go back up"),
 		row("gg / G", "top / bottom (gg jumps to `..` if shown)"),
 		row("R", "refresh from disk"),
 		row("ctrl+d / pgdn", "scroll details down"),
