@@ -11,7 +11,9 @@ Things we know we want, grouped by rough effort.
 
 ## Polish & robustness
 
+- [ ] **Multi-key chord support for action keybinds.** Currently action `keybind:` must be a single key (or single key + modifier). General chord parsing would let users bind e.g. `gi` to a GitHub-issue action without conflicting with built-in chords.
 - [ ] **Action keybind collision warning.** Validate at config load that no user action keybind shadows a built-in binding; emit a startup warning (and refuse to install the colliding bind).
+- [ ] **Insert-between prefixes.** v0.1.x always appends (next gap-of-10) on Create and swaps on K/J. Wire `store.PrefixBetween` + a dedicated "insert here" action so the gap-of-10 spacing is actually exploited.
 - [ ] **`nextPrefix` overflow past 99 siblings.** `%03d` gives `1000-foo` which sorts before `990-foo` in `ls`; switch to `%04d` or run a compaction pass at threshold.
 - [ ] **`WriteIndex` defensive keys.** A poisoned `fm.Extra` map can currently clobber canonical fields (`status`, `type`, ...) on the next save. Skip reserved keys when iterating `Extra`.
 - [ ] **`store.Rename` collision pre-check.** If `010-foo` is renamed to a slug another sibling already owns, `os.Rename` either fails mid-way or silently clobbers depending on OS; pre-check siblings.

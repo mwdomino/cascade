@@ -94,7 +94,7 @@ A container is "effectively done" when every descendant task is done. The sideba
     20260618T100432-old-task/
 ```
 
-- Sibling order = numeric filename prefix with gaps of 10 (`010-`, `020-`, `030-`). Inserting between two siblings uses `015-` so git diffs stay small.
+- Sibling order = numeric filename prefix with gaps of 10 (`010-`, `020-`, `030-`). v0.1.x always appends with the next gap-of-10 prefix; `K`/`J` reorder by swapping prefixes between neighbors. True insert-between (e.g. `015-` between `010-` and `020-`) is on the roadmap.
 - `index.md` has YAML frontmatter (title, status, type, created, updated, tags) plus any extra keys you want — they round-trip untouched and become `$CASCADE_FM_*` env vars for actions.
 - Edit files outside cascade with any editor; press `R` inside cascade to reload from disk.
 
@@ -157,10 +157,12 @@ actions:
   create-github-issue:
     cmd: 'gh issue create -R "$CASCADE_FM_GITHUB_REPO" -t "$CASCADE_TITLE" -F -'
     stdin: body
-    keybind: gi
+    keybind: i           # single-key only (or with modifier, e.g. "ctrl+i")
     when:
       has_frontmatter: [github_repo]
 ```
+
+> Action keybinds in v0.1.x must be a single key or a single key with a modifier (e.g. `i`, `ctrl+i`, `alt+x`). Multi-character chord sequences like `gi` are not yet implemented for actions — only the built-in `gg`, `gn`, and `dd` chords are.
 
 ## Themes
 
