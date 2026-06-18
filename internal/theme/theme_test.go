@@ -60,6 +60,23 @@ func TestResolveUnknown(t *testing.T) {
 	}
 }
 
+func TestGlamourStyleEmphasisSlots(t *testing.T) {
+	th, _ := Resolve(&config.Config{ThemeName: "dracula"})
+	s := th.GlamourStyle()
+	if s.Emph.Italic == nil || !*s.Emph.Italic {
+		t.Error("Emph should be italic")
+	}
+	if s.Strong.Bold == nil || !*s.Strong.Bold {
+		t.Error("Strong should be bold")
+	}
+	if s.Strikethrough.CrossedOut == nil || !*s.Strikethrough.CrossedOut {
+		t.Error("Strikethrough should be crossed-out")
+	}
+	if s.Item.BlockPrefix == "" {
+		t.Error("Item should declare a bullet prefix")
+	}
+}
+
 func TestGlamourStyleHeadingsAndTasks(t *testing.T) {
 	th, _ := Resolve(&config.Config{ThemeName: "dracula"})
 	s := th.GlamourStyle()

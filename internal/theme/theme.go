@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/glamour/ansi"
+	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mwdomino/cascade/internal/config"
 	"github.com/mwdomino/cascade/internal/model"
@@ -129,20 +130,64 @@ func (t *Theme) StatusGlyph(s model.Status) string {
 	return lipgloss.NewStyle().Foreground(color).Render(ch)
 }
 
+// GlamourStyle starts from glamour's bundled Dracula config (which already
+// has sensible defaults for lists, emphasis, strikethrough, blockquotes, and
+// code blocks) and overrides only the slots cascade lets users theme via
+// yaml: headings (per level), code/link/list color, and the task checkbox
+// glyphs/colors.
 func (t *Theme) GlamourStyle() ansi.StyleConfig {
 	str := func(c lipgloss.Color) *string { s := string(c); return &s }
-	bp := uint(0)
+	zero := uint(0)
+	cfg := styles.DraculaStyleConfig
 
-	headingBlock := func(c lipgloss.Color) ansi.StyleBlock {
-		color := c
-		if color == "" {
-			color = t.Markdown.Heading
+	// Cascade renders the title block itself (lipgloss-styled) and pads the
+	// details pane, so we don't want glamour's "# "/"## " literal prefixes
+	// or the outer document margin around the body.
+	cfg.Document.Margin = &zero
+	cfg.Document.BlockPrefix = ""
+	cfg.Document.BlockSuffix = ""
+
+	headingColor := func(level *ansi.StyleBlock, c lipgloss.Color) {
+		if c == "" {
+			c = t.Markdown.Heading
 		}
-		return ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: str(color), Bold: boolPtr(true)},
+		level.Prefix = "" // drop the literal "# "/"## " glamour prepends
+		if c == "" {
+			return
 		}
+		level.Color = str(c)
+		level.Bold = boolPtr(true)
+	}
+	headingColor(&cfg.H1, t.Markdown.HeadingH1)
+	headingColor(&cfg.H2, t.Markdown.HeadingH2)
+	headingColor(&cfg.H3, t.Markdown.HeadingH3)
+	headingColor(&cfg.H4, t.Markdown.HeadingH4)
+	headingColor(&cfg.H5, t.Markdown.HeadingH5)
+	headingColor(&cfg.H6, t.Markdown.HeadingH6)
+	if t.Markdown.Heading != "" {
+		cfg.Heading.Color = str(t.Markdown.Heading)
 	}
 
+	if t.Markdown.Code != "" {
+		cfg.Code.Color = str(t.Markdown.Code)
+		cfg.CodeBlock.Color = str(t.Markdown.Code)
+	}
+	if t.Markdown.Link != "" {
+		cfg.Link.Color = str(t.Markdown.Link)
+		cfg.LinkText.Color = str(t.Markdown.Link)
+	}
+	if t.Markdown.List != "" {
+		cfg.Item.Color = str(t.Markdown.List)
+		cfg.Enumeration.Color = str(t.Markdown.List)
+	}
+	if t.Palette.Fg != "" {
+		cfg.Document.Color = str(t.Palette.Fg)
+		cfg.Text.Color = str(t.Palette.Fg)
+	}
+
+	// Replace task glyphs with cascade's status icons in cascade's status
+	// colors. Glamour's Task slot uses a single foreground color for both
+	// ticked and unticked; we bake per-state colors into the prefix strings.
 	doneColor := t.Markdown.CheckboxDone
 	if doneColor == "" {
 		doneColor = t.Status.Done
@@ -151,32 +196,10 @@ func (t *Theme) GlamourStyle() ansi.StyleConfig {
 	if todoColor == "" {
 		todoColor = t.Palette.Dim
 	}
+	cfg.Task.Ticked = lipgloss.NewStyle().Foreground(doneColor).Render("✓ ")
+	cfg.Task.Unticked = lipgloss.NewStyle().Foreground(todoColor).Render("○ ")
 
-	return ansi.StyleConfig{
-		Document: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: str(t.Palette.Fg)},
-			Margin:         &bp,
-		},
-		Heading: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: str(t.Markdown.Heading), Bold: boolPtr(true)},
-		},
-		H1: headingBlock(t.Markdown.HeadingH1),
-		H2: headingBlock(t.Markdown.HeadingH2),
-		H3: headingBlock(t.Markdown.HeadingH3),
-		H4: headingBlock(t.Markdown.HeadingH4),
-		H5: headingBlock(t.Markdown.HeadingH5),
-		H6: headingBlock(t.Markdown.HeadingH6),
-		Code: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: str(t.Markdown.Code)},
-		},
-		Link: ansi.StylePrimitive{Color: str(t.Markdown.Link), Underline: boolPtr(true)},
-		Item: ansi.StylePrimitive{Color: str(t.Markdown.List)},
-		Task: ansi.StyleTask{
-			StylePrimitive: ansi.StylePrimitive{Color: str(t.Markdown.List)},
-			Ticked:         lipgloss.NewStyle().Foreground(doneColor).Render("✓ "),
-			Unticked:       lipgloss.NewStyle().Foreground(todoColor).Render("○ "),
-		},
-	}
+	return cfg
 }
 
 func boolPtr(b bool) *bool { return &b }
