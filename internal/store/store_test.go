@@ -87,6 +87,29 @@ func TestSoftDelete(t *testing.T) {
 	}
 }
 
+func TestMoveUpWithDuplicateSlugs(t *testing.T) {
+	tree := newTree(t)
+	// Create two siblings that share a slug. Tree.Create slugifies title;
+	// passing the same title gives both slug="foo".
+	a, _ := tree.Create(tree.Root, "foo") // 010-foo
+	b, _ := tree.Create(tree.Root, "foo") // 020-foo
+	if a.Slug != "foo" || b.Slug != "foo" {
+		t.Fatalf("setup: slugs %q %q", a.Slug, b.Slug)
+	}
+	if err := tree.MoveUp(b); err != nil {
+		t.Fatalf("MoveUp on duplicate slug should succeed via temp path, got: %v", err)
+	}
+	if a.Prefix != 20 || b.Prefix != 10 {
+		t.Errorf("prefixes after swap: a=%d b=%d", a.Prefix, b.Prefix)
+	}
+	if _, err := os.Stat(a.Path); err != nil {
+		t.Errorf("a path missing post-swap: %v", err)
+	}
+	if _, err := os.Stat(b.Path); err != nil {
+		t.Errorf("b path missing post-swap: %v", err)
+	}
+}
+
 func TestCreateAtRespectsPrefix(t *testing.T) {
 	tree := newTree(t)
 	tree.Create(tree.Root, "first")

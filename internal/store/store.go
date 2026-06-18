@@ -146,28 +146,47 @@ func (t *Tree) swapWithNeighbor(n *model.Node, dir int) error {
 	}
 	other := siblings[target]
 	n.Prefix, other.Prefix = other.Prefix, n.Prefix
-	if err := t.renameWithCurrentPrefix(n); err != nil {
-		return err
-	}
-	if err := t.renameWithCurrentPrefix(other); err != nil {
+	if err := t.swapPaths(n, other); err != nil {
+		// Restore in-memory prefix on failure so we don't leave the tree
+		// half-mutated relative to disk.
+		n.Prefix, other.Prefix = other.Prefix, n.Prefix
 		return err
 	}
 	siblings[idx], siblings[target] = siblings[target], siblings[idx]
 	return nil
 }
 
-func (t *Tree) renameWithCurrentPrefix(n *model.Node) error {
-	newPath := filepath.Join(filepath.Dir(n.Path), FormatPrefix(n.Prefix, n.Slug))
-	if newPath == n.Path {
-		return nil
+// swapPaths renames a and b to their target paths via a temp path so that
+// final paths colliding (e.g. duplicate slugs 010-foo / 020-foo swapping
+// prefixes) doesn't trip os.Rename's "target already exists" branch.
+// Falls back to rollback if any step fails.
+func (t *Tree) swapPaths(a, b *model.Node) error {
+	aFinal := filepath.Join(filepath.Dir(a.Path), FormatPrefix(a.Prefix, a.Slug))
+	bFinal := filepath.Join(filepath.Dir(b.Path), FormatPrefix(b.Prefix, b.Slug))
+	if aFinal == a.Path && bFinal == b.Path {
+		return nil // nothing to do (prefixes were already correct)
 	}
-	if err := os.Rename(n.Path, newPath); err != nil {
+	tmpA := a.Path + ".cascade-swap"
+	if err := os.Rename(a.Path, tmpA); err != nil {
 		return err
 	}
-	delete(t.byPath, n.Path)
-	n.Path = newPath
-	t.byPath[newPath] = n
-	t.rebuildByPathSubtree(n)
+	if err := os.Rename(b.Path, bFinal); err != nil {
+		_ = os.Rename(tmpA, a.Path)
+		return err
+	}
+	if err := os.Rename(tmpA, aFinal); err != nil {
+		_ = os.Rename(bFinal, b.Path)
+		_ = os.Rename(tmpA, a.Path)
+		return err
+	}
+	delete(t.byPath, a.Path)
+	delete(t.byPath, b.Path)
+	a.Path = aFinal
+	b.Path = bFinal
+	t.byPath[aFinal] = a
+	t.byPath[bFinal] = b
+	t.rebuildByPathSubtree(a)
+	t.rebuildByPathSubtree(b)
 	return nil
 }
 
