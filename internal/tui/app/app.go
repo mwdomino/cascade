@@ -363,9 +363,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
-		sw := msg.Width / 5
-		if sw < 20 {
-			sw = 20
+		sw := msg.Width / 6
+		if sw < 24 {
+			sw = 24
+		}
+		if sw > 36 {
+			sw = 36
 		}
 		m.Sidebar.Width = sw
 		m.Sidebar.Height = msg.Height - 2
