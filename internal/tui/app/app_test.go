@@ -442,6 +442,57 @@ func TestGotoRootJumpsToTopLevel(t *testing.T) {
 	}
 }
 
+func TestThemePreviewAppliesOnHoverAndRevertsOnEsc(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	if m.Theme.Name != "dracula" {
+		t.Fatalf("setup theme = %q", m.Theme.Name)
+	}
+
+	// Open the palette and type "gruv" to filter to theme:gruvbox.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+	for _, r := range "gruv" {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if !m.PreviewingTheme {
+		t.Errorf("expected PreviewingTheme=true after hovering theme:gruvbox")
+	}
+	if m.Theme.Name != "gruvbox" {
+		t.Errorf("expected live preview to switch to gruvbox; got %q", m.Theme.Name)
+	}
+
+	// Esc should revert to the saved (dracula) theme.
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.PaletteMode {
+		t.Error("Esc should close palette")
+	}
+	if m.PreviewingTheme {
+		t.Error("Esc should clear preview state")
+	}
+	if m.Theme.Name != "dracula" {
+		t.Errorf("Esc should revert theme; got %q", m.Theme.Name)
+	}
+}
+
+func TestThemePreviewCommitsOnEnter(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+	for _, r := range "nord" {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.PaletteMode {
+		t.Error("Enter should close palette")
+	}
+	if m.Theme.Name != "nord" {
+		t.Errorf("Enter on theme:nord should commit; got %q", m.Theme.Name)
+	}
+}
+
 func TestThemeSwitchInPalette(t *testing.T) {
 	tree, th, cfg := setup(t)
 	m := newModel(tree, th, cfg).(*Model)
@@ -664,5 +715,25 @@ func TestCaptureNewTask(t *testing.T) {
 	}
 	if !found {
 		t.Error("new task not created on disk")
+	}
+}
+
+func TestOverlaySplicesAtPosition(t *testing.T) {
+	base := "AAAAAAAAAA\nBBBBBBBBBB\nCCCCCCCCCC"
+	top := "XX\nYY"
+	got := overlay(base, top, 4, 1)
+	want := "AAAAAAAAAA\nBBBBXXBBBB\nCCCCYYCCCC"
+	if got != want {
+		t.Errorf("overlay = %q\nwant %q", got, want)
+	}
+}
+
+func TestOverlayPadsShortBaseLines(t *testing.T) {
+	base := "A\nB\nC"
+	top := "XX\nYY"
+	got := overlay(base, top, 4, 1)
+	want := "A\nB   XX\nC   YY"
+	if got != want {
+		t.Errorf("overlay padding = %q\nwant %q", got, want)
 	}
 }

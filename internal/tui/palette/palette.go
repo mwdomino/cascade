@@ -32,6 +32,17 @@ func New(th *theme.Theme) Model {
 
 func (m *Model) SetItems(items []Item) { m.Items = items; m.Cur = 0 }
 
+// Selected returns the item the cursor currently points at after fuzzy
+// filtering. Used by callers that want to react to hover changes (live
+// theme preview, etc.).
+func (m Model) Selected() (Item, bool) {
+	fil := m.filtered()
+	if m.Cur < 0 || m.Cur >= len(fil) {
+		return Item{}, false
+	}
+	return fil[m.Cur], true
+}
+
 func (m Model) filtered() []Item {
 	q := strings.TrimSpace(m.ti.Value())
 	if q == "" {

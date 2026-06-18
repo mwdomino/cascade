@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/mwdomino/cascade/internal/action"
 	"github.com/mwdomino/cascade/internal/config"
 	"github.com/mwdomino/cascade/internal/editor"
@@ -115,6 +116,13 @@ type Model struct {
 
 	// Checkbox toggle overlay state
 	ToggleMode bool
+
+	// Theme preview state: when the palette is open and the user hovers a
+	// theme:<name> item, we mutate *m.Theme in place so they see the result
+	// live. SavedTheme is a deep copy captured at palette-open so Esc (or
+	// any non-theme commit) can revert.
+	SavedTheme      theme.Theme
+	PreviewingTheme bool
 
 	Width, Height int
 }
@@ -371,14 +379,37 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Palette mode: forward keys to palette, handle Esc.
+		// Palette mode: forward keys to palette, handle Esc, and apply
+		// live theme preview as the user hovers theme:<name> entries.
 		if m.PaletteMode {
 			if msg.String() == "esc" {
+				m.revertThemePreviewIfActive()
 				m.PaletteMode = false
 				return m, nil
 			}
+			if msg.String() == "enter" {
+				// If the user commits a non-theme item, revert any preview
+				// first so the chosen command sees the saved theme.
+				if sel, ok := m.Palette.Selected(); !ok || !strings.HasPrefix(sel.Name, "theme:") {
+					m.revertThemePreviewIfActive()
+				}
+				// Theme commit: the Run callback re-applies and updates Cfg,
+				// so the previewed theme stays. Either way, we drop preview
+				// bookkeeping when the palette closes.
+			}
 			var cmd tea.Cmd
 			m.Palette, cmd = m.Palette.Update(msg)
+			// Sync preview to whatever's now highlighted (skip Enter/Esc —
+			// those are terminal, we already dealt with them above).
+			if msg.String() != "enter" && msg.String() != "esc" {
+				if sel, ok := m.Palette.Selected(); ok {
+					if strings.HasPrefix(sel.Name, "theme:") {
+						m.previewTheme(strings.TrimPrefix(sel.Name, "theme:"))
+					} else {
+						m.revertThemePreviewIfActive()
+					}
+				}
+			}
 			return m, cmd
 		}
 
@@ -496,6 +527,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.Keys.Palette):
 			if m.PromptMode == promptNone {
+				// Snapshot the current theme so theme:<name> previews can
+				// be reverted if the user picks something else (or cancels).
+				m.SavedTheme = *m.Theme
+				m.PreviewingTheme = false
 				m.PaletteMode = true
 				m.Palette = palette.New(m.Theme)
 				m.Palette.SetItems(m.paletteItems())
@@ -1086,16 +1121,6 @@ func (m *Model) View() string {
 	detPadded := lipgloss.NewStyle().PaddingLeft(1).Render(det)
 	pane := lipgloss.JoinHorizontal(lipgloss.Top, side, detPadded)
 
-	// Palette and move-picker render as centered modals over the pane area,
-	// replacing the pane content but leaving head + hint visible.
-	if m.PaletteMode {
-		pane = lipgloss.Place(m.Width, paneH, lipgloss.Center, lipgloss.Center,
-			m.paletteCard())
-	} else if m.MovePickerMode {
-		pane = lipgloss.Place(m.Width, paneH, lipgloss.Center, lipgloss.Center,
-			m.movePickerCard())
-	}
-
 	parts := []string{head, pane}
 	if bottom != "" {
 		parts = append(parts, bottom)
@@ -1103,7 +1128,91 @@ func (m *Model) View() string {
 	if hint != "" {
 		parts = append(parts, hint)
 	}
-	return strings.Join(parts, "\n")
+	full := strings.Join(parts, "\n")
+
+	// Palette and move-picker float OVER the panes (true overlay, not
+	// replacement) so the user keeps the project list and details
+	// visible — useful for the live theme-preview path in particular.
+	var card string
+	switch {
+	case m.PaletteMode:
+		card = m.paletteCard()
+	case m.MovePickerMode:
+		card = m.movePickerCard()
+	}
+	if card != "" && m.Width > 0 && m.Height > 0 {
+		cardW := lipgloss.Width(card)
+		cardH := lipgloss.Height(card)
+		x := (m.Width - cardW) / 2
+		y := (m.Height - cardH) / 2
+		full = overlay(full, card, x, y)
+	}
+	return full
+}
+
+// previewTheme applies `name` in place so the user sees the theme behind
+// the open palette change as they navigate to it. SavedTheme captured at
+// palette-open lets us revert if they cancel or pick something else.
+func (m *Model) previewTheme(name string) {
+	if name == m.Theme.Name && !m.PreviewingTheme {
+		return // already showing this one — nothing to do
+	}
+	tmp := *m.Cfg
+	tmp.ThemeName = name
+	tmp.ThemeInline = nil
+	newTheme, err := theme.Resolve(&tmp)
+	if err != nil {
+		return
+	}
+	*m.Theme = *newTheme
+	m.Details.ClearCache()
+	m.PreviewingTheme = true
+}
+
+func (m *Model) revertThemePreviewIfActive() {
+	if !m.PreviewingTheme {
+		return
+	}
+	*m.Theme = m.SavedTheme
+	m.Details.ClearCache()
+	m.PreviewingTheme = false
+}
+
+// overlay paints `top` onto `base` at column `x`, row `y`. Both strings
+// may contain ANSI escapes; widths are measured as visible cells via
+// lipgloss/x/ansi.
+func overlay(base, top string, x, y int) string {
+	if top == "" {
+		return base
+	}
+	baseLines := strings.Split(base, "\n")
+	topLines := strings.Split(top, "\n")
+	topW := lipgloss.Width(top)
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+
+	for i, tl := range topLines {
+		row := y + i
+		for row >= len(baseLines) {
+			baseLines = append(baseLines, "")
+		}
+		bl := baseLines[row]
+		baseW := lipgloss.Width(bl)
+		// Pad base so it's at least x+topW wide; preserves any trailing
+		// reset codes after we paste the overlay.
+		if pad := x + topW - baseW; pad > 0 {
+			bl += strings.Repeat(" ", pad)
+			baseW += pad
+		}
+		left := ansi.Cut(bl, 0, x)
+		right := ansi.Cut(bl, x+topW, baseW)
+		baseLines[row] = left + tl + right
+	}
+	return strings.Join(baseLines, "\n")
 }
 
 // openConfirm pops the y/N overlay with a custom message and callback so
@@ -1226,21 +1335,23 @@ func (m *Model) movePickerCard() string {
 		Foreground(m.Theme.Palette.Accent).
 		Bold(true).
 		Render("move to:")
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.Theme.Palette.Border).
-		Padding(0, 2).
-		Render(header + "\n" + m.MovePicker.View())
+	return m.cardStyle().Render(header + "\n" + m.MovePicker.View())
 }
 
 // paletteCard wraps the palette view in a rounded border so it reads as a
 // floating modal rather than a bare list.
 func (m *Model) paletteCard() string {
+	return m.cardStyle().Render(m.Palette.View())
+}
+
+// cardStyle is the common look for centered overlay cards: rounded border,
+// padding, and a solid background so they cleanly cover the panes behind.
+func (m *Model) cardStyle() lipgloss.Style {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.Theme.Palette.Border).
-		Padding(0, 2).
-		Render(m.Palette.View())
+		Background(m.Theme.Palette.Bg).
+		Padding(0, 2)
 }
 
 // clipLines truncates s to at most n lines.
