@@ -727,19 +727,22 @@ func (m *Model) inboxNode() *model.Node {
 	if inboxName == "" {
 		inboxName = "999-inbox"
 	}
-	// Strip the numeric prefix if present so we compare by slug.
-	_, slug, ok := store.ParsePrefix(inboxName)
+	// Parse the configured form. "999-inbox" → (999, "inbox"); a bare slug
+	// like "inbox" → (0, "inbox") and we default the prefix to 999.
+	prefix, slug, ok := store.ParsePrefix(inboxName)
 	if !ok {
-		slug = inboxName // user gave a bare slug like "inbox"
+		slug = inboxName
+		prefix = 999
 	}
 	for _, c := range m.Tree.Root.Children {
 		if c.Slug == slug {
 			return c
 		}
 	}
-	// Not found — create a top-level inbox category. Use the slug as title;
-	// its on-disk prefix will be assigned by Tree.Create (next gap-of-10).
-	n, err := m.Tree.Create(m.Tree.Root, slug)
+	// Create at the configured prefix; CreateAt falls back to nextPrefix
+	// only if the slot is taken (so a single-instance inbox always lands
+	// at its declared 999-).
+	n, err := m.Tree.CreateAt(m.Tree.Root, slug, prefix)
 	if err != nil {
 		return nil
 	}

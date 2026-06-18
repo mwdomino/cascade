@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,7 +35,32 @@ func (t *Tree) Create(parent *model.Node, title string) (*model.Node, error) {
 	if parent == nil {
 		parent = t.Root
 	}
-	prefix := t.nextPrefix(parent)
+	return t.createAt(parent, title, t.nextPrefix(parent))
+}
+
+// CreateAt creates a child with the given prefix. If prefix <= 0 or a
+// sibling already owns it, falls back to nextPrefix. Useful when callers
+// want a specific slot (e.g. an inbox declared as 999-inbox in config).
+func (t *Tree) CreateAt(parent *model.Node, title string, prefix int) (*model.Node, error) {
+	if parent == nil {
+		parent = t.Root
+	}
+	if prefix <= 0 || prefixTaken(parent, prefix) {
+		prefix = t.nextPrefix(parent)
+	}
+	return t.createAt(parent, title, prefix)
+}
+
+func prefixTaken(parent *model.Node, prefix int) bool {
+	for _, c := range parent.Children {
+		if c.Prefix == prefix {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *Tree) createAt(parent *model.Node, title string, prefix int) (*model.Node, error) {
 	slug := slugify(title)
 	dir := filepath.Join(parent.Path, FormatPrefix(prefix, slug))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -52,6 +78,9 @@ func (t *Tree) Create(parent *model.Node, title string) (*model.Node, error) {
 		Parent: parent,
 	}
 	parent.Children = append(parent.Children, child)
+	sort.SliceStable(parent.Children, func(i, j int) bool {
+		return parent.Children[i].Prefix < parent.Children[j].Prefix
+	})
 	t.byPath[dir] = child
 	// Reload to pick up any disk-side details (e.g. Created timestamp).
 	if reloadFM, body, err := ReadIndex(filepath.Join(dir, "index.md")); err == nil {

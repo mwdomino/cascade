@@ -87,6 +87,34 @@ func TestSoftDelete(t *testing.T) {
 	}
 }
 
+func TestCreateAtRespectsPrefix(t *testing.T) {
+	tree := newTree(t)
+	tree.Create(tree.Root, "first")
+	tree.Create(tree.Root, "second")
+	n, err := tree.CreateAt(tree.Root, "inbox", 999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Prefix != 999 {
+		t.Errorf("expected prefix 999, got %d", n.Prefix)
+	}
+	if !strings.HasSuffix(n.Path, "999-inbox") {
+		t.Errorf("path should end with 999-inbox, got %s", n.Path)
+	}
+}
+
+func TestCreateAtCollisionFallsBack(t *testing.T) {
+	tree := newTree(t)
+	tree.CreateAt(tree.Root, "a", 100)
+	n, err := tree.CreateAt(tree.Root, "b", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Prefix == 100 {
+		t.Errorf("expected fallback prefix, got the colliding one (100)")
+	}
+}
+
 func TestSetStatus(t *testing.T) {
 	tree := newTree(t)
 	n, _ := tree.Create(tree.Root, "task")
