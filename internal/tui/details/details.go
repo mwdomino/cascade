@@ -165,7 +165,7 @@ func (m *Model) View(n *model.Node) string {
 		indicator := lipgloss.NewStyle().
 			Foreground(m.Theme.Palette.Dim).
 			Italic(true).
-			Render("↓ more (ctrl+d / pgdn)")
+			Render("↓ more (ctrl+d / ctrl+j / pgdn)")
 		parts = append(parts, indicator)
 	}
 

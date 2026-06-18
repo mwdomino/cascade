@@ -40,8 +40,8 @@ func Default() Map {
 		SearchGlobal: key.NewBinding(key.WithKeys("ctrl+f")),
 		Palette:      key.NewBinding(key.WithKeys(":")),
 		Help:         key.NewBinding(key.WithKeys("?")),
-		ScrollDown:   key.NewBinding(key.WithKeys("ctrl+d", "pgdown")),
-		ScrollUp:     key.NewBinding(key.WithKeys("ctrl+u", "pgup")),
+		ScrollDown:   key.NewBinding(key.WithKeys("ctrl+d", "ctrl+j", "pgdown")),
+		ScrollUp:     key.NewBinding(key.WithKeys("ctrl+u", "ctrl+k", "pgup")),
 		ToggleCheckbox: key.NewBinding(key.WithKeys("t")),
 	}
 }

@@ -238,7 +238,7 @@ Highlights since v0.1.0:
 - per-level heading colors (H1–H6) and styled task checkboxes
 - stable layout — overlays no longer push the view upward
 - centered palette modal + centered fuzzy picker for move-to (`m`)
-- scrollable details pane (`ctrl+d/u`, `pgdn/pgup`)
+- scrollable details pane (`ctrl+d/u`, `ctrl+j/k`, `pgdn/pgup`)
 - proper `gg` / `gn` two-key chord handling
 - four built-in themes (`dracula`, `gruvbox`, `tokyonight`, `nord`)
 - status-band sort within a tier (doing → blocked → todo → done)
