@@ -122,6 +122,8 @@ func (m *Model) View(n *model.Node) string {
 	if subtasks != "" {
 		if scroll.Len() > 0 {
 			scroll.WriteString("\n")
+			scroll.WriteString(rule)
+			scroll.WriteString("\n")
 		}
 		scroll.WriteString(subtasks)
 	}
