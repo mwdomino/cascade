@@ -398,6 +398,68 @@ func TestZTogglePreservesSelection(t *testing.T) {
 	}
 }
 
+func TestPaletteHasBuiltinCommands(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	got := map[string]bool{}
+	for _, it := range m.paletteItems() {
+		got[it.Name] = true
+	}
+	for _, want := range []string{
+		"refresh", "about", "stats", "export:tree",
+		"goto:root", "goto:inbox", "goto:trash",
+		"toggle:done", "empty-trash", "purge-done",
+		"edit:config", "reveal:tasks_dir",
+		"theme:dracula", "theme:gruvbox", "theme:tokyonight", "theme:nord",
+	} {
+		if !got[want] {
+			t.Errorf("palette missing command %q", want)
+		}
+	}
+}
+
+func TestGotoRootJumpsToTopLevel(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	// Drill into Work then into Ship v1.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.Current == tree.Root {
+		t.Fatal("setup: should be drilled in")
+	}
+	// Find and run the goto:root command.
+	for _, it := range m.paletteItems() {
+		if it.Name == "goto:root" {
+			it.Run()
+			break
+		}
+	}
+	if m.Current != tree.Root {
+		t.Errorf("goto:root should land on tree.Root, got %v", m.Current)
+	}
+}
+
+func TestThemeSwitchInPalette(t *testing.T) {
+	tree, th, cfg := setup(t)
+	m := newModel(tree, th, cfg).(*Model)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	if m.Theme.Name != "dracula" {
+		t.Fatalf("setup: theme=%q", m.Theme.Name)
+	}
+	for _, it := range m.paletteItems() {
+		if it.Name == "theme:gruvbox" {
+			it.Run()
+			break
+		}
+	}
+	if m.Theme.Name != "gruvbox" {
+		t.Errorf("theme switch failed: %q", m.Theme.Name)
+	}
+}
+
 func TestBackspaceAscends(t *testing.T) {
 	tree, th, cfg := setup(t)
 	m := newModel(tree, th, cfg).(*Model)

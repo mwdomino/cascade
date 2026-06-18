@@ -41,6 +41,16 @@ func (m *Model) ScrollUp(lines int) {
 
 func (m *Model) ResetScroll() { m.YOffset = 0 }
 
+// ClearCache invalidates the glamour renderer + memoized output. Callers
+// should run this when the theme changes at runtime so the next View
+// rebuilds with the new colors.
+func (m *Model) ClearCache() {
+	m.renderer = nil
+	m.rendererW = 0
+	m.cachedBody = ""
+	m.cachedOutput = ""
+}
+
 func (m *Model) View(n *model.Node) string {
 	if n == nil {
 		return lipgloss.NewStyle().Foreground(m.Theme.Palette.Dim).Render("(no selection)")

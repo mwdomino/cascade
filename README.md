@@ -192,6 +192,26 @@ theme:
     checkbox_todo: "#6272a4"
 ```
 
+## Command palette (`:`)
+
+Beyond user-defined actions, the palette ships with these built-ins. None have keybinds yet (open the palette with `:` and type to filter):
+
+| Command | What |
+|---|---|
+| `refresh` | reload the tree from disk (same as `R`) |
+| `about` | show cascade version, tasks_dir, theme, node count |
+| `stats` | counts by node type and task status |
+| `export:tree` | dump the whole tree as a nested markdown checklist |
+| `goto:root` | jump back to the top-level project list |
+| `goto:inbox` | jump to the configured inbox |
+| `goto:trash` | list trashed nodes |
+| `toggle:done` | same as `Z` |
+| `empty-trash` | permanently delete everything in `.trash/` (confirmed) |
+| `purge-done` | soft-delete every effectively-done node (confirmed) |
+| `edit:config` | open the global `config.yaml` in `$EDITOR` |
+| `reveal:tasks_dir` | open tasks_dir in the OS file manager (`xdg-open` / `open` / `explorer`) |
+| `theme:<name>` | switch to any built-in theme at runtime |
+
 ## Actions
 
 Actions are shell commands invoked via the `:` palette or a bound key. cascade injects task context as env vars:

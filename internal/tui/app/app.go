@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -26,6 +27,10 @@ import (
 	"github.com/mwdomino/cascade/internal/tui/search"
 	"github.com/mwdomino/cascade/internal/tui/sidebar"
 )
+
+// Version is the running cascade build identifier; populated from main
+// via -X main.version (and mirrored here so palette commands can show it).
+var Version = "dev"
 
 type promptMode int
 
@@ -83,10 +88,12 @@ type Model struct {
 	GlobalMode    bool
 
 	// Confirm overlay state
-	ConfirmMode bool
-	ConfirmHard bool
-	PendingDD   bool
-	DDDeadline  time.Time
+	ConfirmMode    bool
+	ConfirmHard    bool
+	ConfirmMessage string  // when non-empty, used in place of the delete prompt
+	ConfirmAction  func()  // when non-nil, called on yes instead of delete logic
+	PendingDD      bool
+	DDDeadline     time.Time
 
 	// g-chord state (gg = Top, gn = QuickNew)
 	PendingG  bool
@@ -390,8 +397,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.ConfirmMode {
 			switch msg.String() {
 			case "y", "Y", "enter":
-				n := m.selectedNode()
-				if n != nil {
+				if m.ConfirmAction != nil {
+					m.ConfirmAction()
+				} else if n := m.selectedNode(); n != nil {
 					var err error
 					if m.ConfirmHard {
 						err = m.Tree.HardDelete(n)
@@ -402,9 +410,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.Cursor = m.cursorMax()
 					}
 				}
-				m.ConfirmMode = false
+				m.dismissConfirm()
 			case "n", "N", "esc":
-				m.ConfirmMode = false
+				m.dismissConfirm()
 			}
 			return m, nil
 		}
@@ -750,13 +758,121 @@ func (m *Model) inboxNode() *model.Node {
 }
 
 func (m *Model) paletteItems() []palette.Item {
+	close := func() { m.PaletteMode = false }
+
 	items := []palette.Item{
-		{Name: "refresh", Run: func() tea.Cmd {
+		{Name: "refresh", Hint: "reload tree from disk", Run: func() tea.Cmd {
 			_ = m.Tree.Reload()
-			m.PaletteMode = false
+			close()
+			return nil
+		}},
+		{Name: "about", Hint: "version, tasks_dir, theme", Run: func() tea.Cmd {
+			m.ActionOut = &action.Result{Stdout: m.aboutText()}
+			close()
+			return nil
+		}},
+		{Name: "stats", Hint: "vault counts by type/status", Run: func() tea.Cmd {
+			m.ActionOut = &action.Result{Stdout: m.statsText()}
+			close()
+			return nil
+		}},
+		{Name: "export:tree", Hint: "render the whole tree as markdown", Run: func() tea.Cmd {
+			m.ActionOut = &action.Result{Stdout: m.exportTreeText()}
+			close()
+			return nil
+		}},
+		{Name: "goto:root", Hint: "jump to the top-level project list", Run: func() tea.Cmd {
+			m.Current = m.Tree.Root
+			m.Cursor = 0
+			close()
+			return nil
+		}},
+		{Name: "goto:inbox", Hint: "jump to the configured inbox", Run: func() tea.Cmd {
+			if n := m.inboxNode(); n != nil {
+				m.Current = n
+				m.Cursor = m.initialDrillCursor()
+			}
+			close()
+			return nil
+		}},
+		{Name: "goto:trash", Hint: "list trashed nodes", Run: func() tea.Cmd {
+			m.ActionOut = &action.Result{Stdout: m.trashText()}
+			close()
+			return nil
+		}},
+		{Name: "toggle:done", Hint: "show / hide effectively-done nodes (Z)", Run: func() tea.Cmd {
+			prev := m.selectedNode()
+			m.ShowDone = !m.ShowDone
+			if prev != nil {
+				m.Cursor = m.cursorAtChild(prev)
+			}
+			if m.Cursor > m.cursorMax() {
+				m.Cursor = m.cursorMax()
+			}
+			if m.Cursor < 0 {
+				m.Cursor = 0
+			}
+			close()
+			return nil
+		}},
+		{Name: "empty-trash", Hint: "permanently delete everything in .trash/", Run: func() tea.Cmd {
+			tasksDir := m.Tree.TasksDir
+			m.openConfirm("permanently empty .trash/? [y/N]", func() {
+				_ = os.RemoveAll(filepath.Join(tasksDir, ".trash"))
+			})
+			close()
+			return nil
+		}},
+		{Name: "purge-done", Hint: "soft-delete every effectively-done node", Run: func() tea.Cmd {
+			m.openConfirm("soft-delete all effectively-done nodes? [y/N]", func() {
+				m.purgeDone()
+			})
+			close()
+			return nil
+		}},
+		{Name: "edit:config", Hint: "open the global config in $EDITOR", Run: func() tea.Cmd {
+			path, ok := configPath()
+			if !ok {
+				m.ActionOut = &action.Result{Stderr: "no config file found", ExitCode: 1}
+				close()
+				return nil
+			}
+			close()
+			return tea.ExecProcess(externalEditorCmd(path), func(err error) tea.Msg {
+				return editorClosedMsg{} // no merge: editing config directly
+			})
+		}},
+		{Name: "reveal:tasks_dir", Hint: "open tasks_dir in the system file manager", Run: func() tea.Cmd {
+			if err := revealDir(m.Tree.TasksDir); err != nil {
+				m.ActionOut = &action.Result{Stderr: err.Error(), ExitCode: 1}
+			}
+			close()
 			return nil
 		}},
 	}
+
+	// One theme:<name> entry per built-in.
+	for _, name := range theme.BuiltinNames() {
+		nm := name
+		items = append(items, palette.Item{
+			Name: "theme:" + nm,
+			Hint: "switch to the " + nm + " theme",
+			Run: func() tea.Cmd {
+				tmp := *m.Cfg
+				tmp.ThemeName = nm
+				tmp.ThemeInline = nil
+				if newTheme, err := theme.Resolve(&tmp); err == nil {
+					*m.Theme = *newTheme
+					m.Cfg.ThemeName = nm
+					m.Cfg.ThemeInline = nil
+					m.Details.ClearCache()
+				}
+				close()
+				return nil
+			},
+		})
+	}
+
 	sel := m.selectedNode()
 	if sel != nil {
 		for _, a := range m.ActionReg.Applicable(sel) {
@@ -766,13 +882,137 @@ func (m *Model) paletteItems() []palette.Item {
 				Hint: act.Def.Cmd,
 				Run: func() tea.Cmd {
 					m.ActionRunning = act.Name
-					m.PaletteMode = false
+					close()
 					return runActionCmd(act, sel)
 				},
 			})
 		}
 	}
 	return items
+}
+
+// configPath returns the absolute path to the global config.yaml (if any).
+func configPath() (string, bool) {
+	xdg := os.Getenv("XDG_CONFIG_HOME")
+	if xdg == "" {
+		home, _ := os.UserHomeDir()
+		xdg = filepath.Join(home, ".config")
+	}
+	p := filepath.Join(xdg, "cascade", "config.yaml")
+	if _, err := os.Stat(p); err == nil {
+		return p, true
+	}
+	return "", false
+}
+
+// revealDir opens path in the platform's file manager.
+func revealDir(path string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	case "windows":
+		cmd = exec.Command("explorer", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	return cmd.Start()
+}
+
+func (m *Model) aboutText() string {
+	return fmt.Sprintf(
+		"cascade %s\n\ntasks_dir: %s\ntheme:     %s\nnodes:     %d",
+		Version, m.Tree.TasksDir, m.Theme.Name, len(m.Tree.AllNodes()),
+	)
+}
+
+func (m *Model) statsText() string {
+	var projects, folders, tasks, doing, blocked, done int
+	for _, n := range m.Tree.AllNodes() {
+		switch n.EffectiveType() {
+		case model.TypeProject:
+			projects++
+		case model.TypeFolder:
+			folders++
+		case model.TypeTask:
+			tasks++
+			switch n.FM.Status {
+			case model.StatusDoing:
+				doing++
+			case model.StatusBlocked:
+				blocked++
+			case model.StatusDone:
+				done++
+			}
+		}
+	}
+	return fmt.Sprintf(
+		"projects: %d  folders: %d  tasks: %d\ndoing: %d  blocked: %d  done: %d",
+		projects, folders, tasks, doing, blocked, done,
+	)
+}
+
+func (m *Model) exportTreeText() string {
+	var b strings.Builder
+	var walk func(n *model.Node, depth int)
+	walk = func(n *model.Node, depth int) {
+		if !n.IsRoot() {
+			for range depth - 1 {
+				b.WriteString("  ")
+			}
+			b.WriteString("- ")
+			switch n.EffectiveType() {
+			case model.TypeProject, model.TypeFolder:
+				b.WriteString(n.Title())
+			default:
+				box := "[ ]"
+				if n.FM.Status == model.StatusDone {
+					box = "[x]"
+				}
+				b.WriteString(box + " " + n.Title())
+			}
+			b.WriteString("\n")
+		}
+		for _, c := range n.Children {
+			walk(c, depth+1)
+		}
+	}
+	walk(m.Tree.Root, 0)
+	if b.Len() == 0 {
+		return "(empty)"
+	}
+	return b.String()
+}
+
+func (m *Model) trashText() string {
+	trashDir := filepath.Join(m.Tree.TasksDir, ".trash")
+	entries, err := os.ReadDir(trashDir)
+	if err != nil {
+		return "(no .trash/ directory yet)"
+	}
+	if len(entries) == 0 {
+		return "(trash is empty)"
+	}
+	var b strings.Builder
+	b.WriteString(trashDir + "\n\n")
+	for _, e := range entries {
+		b.WriteString("  " + e.Name() + "\n")
+	}
+	return b.String()
+}
+
+// purgeDone soft-deletes every effectively-done node, skipping descendants
+// whose ancestor is also effectively done (so we don't double-delete).
+func (m *Model) purgeDone() {
+	for _, n := range m.Tree.AllNodes() {
+		if !n.EffectivelyDone() {
+			continue
+		}
+		if n.Parent != nil && !n.Parent.IsRoot() && n.Parent.EffectivelyDone() {
+			continue // ancestor will trash this one
+		}
+		_ = m.Tree.SoftDelete(n)
+	}
 }
 
 func externalEditorCmd(path string) *exec.Cmd {
@@ -802,6 +1042,9 @@ func (m *Model) View() string {
 		confirmMsg := "soft-delete?"
 		if m.ConfirmHard {
 			confirmMsg = "HARD DELETE? (cannot be undone)"
+		}
+		if m.ConfirmMessage != "" {
+			confirmMsg = m.ConfirmMessage
 		}
 		bottom = lipgloss.NewStyle().
 			Foreground(m.Theme.Status.Blocked).
@@ -861,6 +1104,22 @@ func (m *Model) View() string {
 		parts = append(parts, hint)
 	}
 	return strings.Join(parts, "\n")
+}
+
+// openConfirm pops the y/N overlay with a custom message and callback so
+// palette commands can reuse the same confirm flow as dd/D.
+func (m *Model) openConfirm(message string, action func()) {
+	m.ConfirmMode = true
+	m.ConfirmMessage = message
+	m.ConfirmAction = action
+	m.ConfirmHard = false
+}
+
+func (m *Model) dismissConfirm() {
+	m.ConfirmMode = false
+	m.ConfirmMessage = ""
+	m.ConfirmAction = nil
+	m.ConfirmHard = false
 }
 
 // digitPressed parses a single-digit keypress ("1".."9").

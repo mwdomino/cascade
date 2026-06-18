@@ -41,6 +41,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "theme:", err)
 		os.Exit(1)
 	}
+	app.Version = version
 	reg := action.NewRegistry(cfg.Actions)
 	p := tea.NewProgram(app.New(tree, th, cfg, reg), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
